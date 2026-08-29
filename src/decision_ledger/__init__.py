@@ -14,6 +14,14 @@ from .calibration import (
     ConformalCalibrator,
 )
 from .consumer import BatchConsumer
+from .database import (
+    Database,
+    DatabaseError,
+    DatabaseIntegrityError,
+    init_database,
+    outcome_source_from_text,
+    outcome_source_to_text,
+)
 from .gatekeeper import (
     CalibrationContext,
     DecisionType,
@@ -57,6 +65,9 @@ __all__ = [
     "CalibrationRecord",
     "CalibrationResult",
     "ConformalCalibrator",
+    "Database",
+    "DatabaseError",
+    "DatabaseIntegrityError",
     "DecisionOutcomeJoiner",
     "DecisionRecord",
     "DecisionType",
@@ -71,10 +82,13 @@ __all__ = [
     "context_hash",
     "decision_id",
     "generate_uuidv7",
+    "init_database",
     "load_policy",
     "make_context_hash",
     "now_ns",
     "now_us",
+    "outcome_source_from_text",
+    "outcome_source_to_text",
     "policy_from_results",
     "save_policy",
     "setup_logging",
