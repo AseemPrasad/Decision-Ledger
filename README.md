@@ -132,11 +132,16 @@ decision_ledger/
 
 ## Docs
 
+- [Architecture (Week 1)](src/docs/ARCHITECTURE_WEEK1.md) — gatekeeper + ring buffer, latency budget, thread safety, exploration
+- [Quickstart](src/docs/QUICKSTART.md) — 5-minute setup with runnable examples
+- [Gatekeeper API](src/docs/API_GATEKEEPER.md) — full reference + common mistakes
+- [Telemetry API](src/docs/API_TELEMETRY.md) — ring buffer + decision records, performance
 - [Design](src/docs/DESIGN.md) — problem, guarantees, architecture, trade-offs
 - [API](src/docs/API.md) — full reference
 - [Runbook](src/docs/RUNBOOK.md) — operations, monitoring, failure modes
 - [Examples](src/docs/EXAMPLES.md) — end-to-end patterns
 - [Benchmarks](src/docs/BENCHMARKS.md) — measured budgets and methodology
+- [Code Style](src/docs/CODE_STYLE.md) — formatting, typing, docstrings, logging
 
 ## Development
 
