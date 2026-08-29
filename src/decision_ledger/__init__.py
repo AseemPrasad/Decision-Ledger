@@ -37,7 +37,17 @@ from .telemetry import (
     DecisionRecord,
     RingBuffer,
 )
-from .utils import context_hash, decision_id
+from .utils import (
+    context_hash,
+    decision_id,
+    generate_uuidv7,
+    make_context_hash,
+    now_ns,
+    now_us,
+    setup_logging,
+    validate_confidence,
+    validate_context_hash,
+)
 
 __version__ = "0.1.0"
 
@@ -60,8 +70,15 @@ __all__ = [
     "ServingPolicy",
     "context_hash",
     "decision_id",
+    "generate_uuidv7",
     "load_policy",
+    "make_context_hash",
+    "now_ns",
+    "now_us",
     "policy_from_results",
     "save_policy",
+    "setup_logging",
+    "validate_confidence",
+    "validate_context_hash",
     "__version__",
 ]

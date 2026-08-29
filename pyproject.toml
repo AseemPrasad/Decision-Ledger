@@ -19,6 +19,8 @@ classifiers = [
 dependencies = [
     "numpy>=1.24.0",
     "PyYAML>=6.0",
+    "blake3>=1.0.0",
+    "uuid6>=2024.0.0",
 ]
 
 [project.optional-dependencies]
