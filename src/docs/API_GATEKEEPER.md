@@ -13,7 +13,7 @@ Dataclass. Decides whether a small model may act for a given context.
 
 | Parameter | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `policy` | `dict[bytes, CalibrationContext]` | — | Calibrated context snapshot keyed by 16-byte context hash. Build with `policy_from_results(...).contexts` or `load_policy(...).contexts`. Swapped atomically via `reload_policy`. |
+| `policy` | `dict[bytes, CalibrationContext]` | — | Calibrated context snapshot keyed by 16-byte context hash. Build with `policy_from_results(...).contexts` or `policy_from_dict(load_policy(...)).contexts`. Swapped atomically via `reload_policy`. |
 | `exploration_rate` | `float` | `0.02` | Epsilon for stratified counterfactual sampling. Must satisfy `0.0 <= rate <= 1.0` (raises `ValueError` otherwise); `0.0` disables exploration. |
 | `telemetry` | `RingBuffer \| None` | `None` | Optional ring buffer. When attached, every `evaluate` appends a `DecisionRecord` with the measured decision latency. Off by default to keep the hot path allocation-free. |
 
@@ -74,9 +74,9 @@ Thread-safe, ~atomic policy swap under the same `RLock` as `evaluate`.
 - Template for the calibration loop:
 
 ```python
-from decision_ledger.policy import load_policy
+from decision_ledger.policy import load_policy, policy_from_dict
 
-gk.reload_policy(load_policy("policies/policy-v1.yaml").contexts)
+gk.reload_policy(policy_from_dict(load_policy("policies/policy-v1.yaml")).contexts)
 ```
 
 ## `get_metrics() -> dict[str, Any]`

@@ -24,4 +24,5 @@ dist/
 
 # Runtime data
 policies/
+data/policies/
 logs/

@@ -153,8 +153,16 @@ prompt_template + model weights + quantization + adapter + temperature
 ```
 
 Any change produces a *new* context -> no samples -> `DRAINING` ->
-gatekeeper escalates until re-calibrated. YAML artifacts round-trip through
-`save_policy` / `load_policy`.
+gatekeeper escalates until re-calibrated. `PolicyGenerator` writes the
+versioned, validated aggregation artifacts (`policy_<YYYYMMdd-HHMMSS>.yaml`,
+schema 1.0): one entry per context in `ACTIVE`, `DRAINING`, or `REVOKED`
+state, plus a `global` settings block. `policy_latest.yaml` points at the
+current artifact (symlink, or a plain copy on Windows without symlink
+privileges); `get_policy_history` / `rollback_policy` implement canonical
+versioning and instant rollback. Artifacts parse through `validate_policy`
+and materialize into serving snapshots via `policy_from_dict`, which drops
+`REVOKED` contexts so the gatekeeper fails closed for them. The legacy
+`save_policy` / `load_policy` round-trip the same format.
 
 ## Guarantees and non-guarantees
 

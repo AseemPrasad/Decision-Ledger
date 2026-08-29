@@ -25,7 +25,8 @@ pip install -e .
    (or via `OutcomeCollector.log_outcome` in-process).
 4. **Calibrate.** Run the calibration job (cron/hourly):
    join decisions + outcomes -> `ConformalCalibrator(db).calibrate_context(ctx)`
-   -> `policy_from_results` -> `save_policy` -> reload in each gatekeeper.
+   -> `PolicyGenerator.generate_policy(results)` (or `policy_from_results` ->
+   `save_policy`) -> reload in each gatekeeper.
    Watch `detect_drift(ctx)` and re-calibrate when it alerts.
 5. **Monitor.** Watch escalation rate, join match rate, per-context
    `q_hat`, and coverage lower bound.
@@ -45,9 +46,15 @@ PY
 
 ## Policies
 
-- Policies live under `policies/` (gitignored; version numbers are time-ordered).
-- `save_policy` at `policies/policy-v<N>.yaml`; keep the last few for rollback.
-- Rollback = `Gatekeeper.reload_policy(load_policy("policies/policy-v<N-1>.yaml").contexts)`.
+- `PolicyGenerator(policies_dir)` writes versioned artifacts
+  `policy_<YYYYMMdd-HHMMSS>.yaml` and repoints `policy_latest.yaml` at the
+  newest. Default dir `data/policies/` (gitignored).
+- `gen.get_policy_history()` lists versions, newest first.
+- Rollback = `gen.rollback_policy("<YYYYMMdd-HHMMSS>")`, then reload in each
+  gatekeeper:
+  `gk.reload_policy(policy_from_dict(gen.load_latest_policy()).contexts)`.
+- Legacy `save_policy(policy, "policies/policy-v<N>.yaml")` still works; the
+  artifact schema is the same, so old and new artifacts are interchangeable.
 
 ## Failure modes
 

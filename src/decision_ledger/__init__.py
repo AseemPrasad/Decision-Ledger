@@ -38,8 +38,12 @@ from .outcomes import (
     OutcomeSource,
 )
 from .policy import (
+    PolicyError,
+    PolicyGenerator,
+    PolicyValidationError,
     ServingPolicy,
     load_policy,
+    policy_from_dict,
     policy_from_results,
     save_policy,
 )
@@ -82,6 +86,9 @@ __all__ = [
     "OutcomeCollector",
     "OutcomeRecord",
     "OutcomeSource",
+    "PolicyError",
+    "PolicyGenerator",
+    "PolicyValidationError",
     "RingBuffer",
     "ServingPolicy",
     "context_hash",
@@ -94,6 +101,7 @@ __all__ = [
     "now_us",
     "outcome_source_from_text",
     "outcome_source_to_text",
+    "policy_from_dict",
     "policy_from_results",
     "save_policy",
     "setup_logging",

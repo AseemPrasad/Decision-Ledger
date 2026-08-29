@@ -121,9 +121,12 @@ def test_full_decision_loop(tmp_path):
     assert policy_path.exists()
 
     # Reload the YAML artifact and enforce with a fresh gatekeeper.
-    from decision_ledger.policy import load_policy
+    from decision_ledger.policy import load_policy, policy_from_dict
 
-    fresh = Gatekeeper(load_policy(policy_path).contexts, exploration_rate=0.0)
+    fresh = Gatekeeper(
+        policy_from_dict(load_policy(policy_path)).contexts,
+        exploration_rate=0.0,
+    )
     assert fresh.evaluate(ctx, 0.95, "route") == GateAction.DELEGATE
     assert fresh.evaluate(ctx, 0.10, "route") == GateAction.ESCALATE
 

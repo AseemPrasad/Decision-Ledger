@@ -42,7 +42,7 @@ from decision_ledger import (
     OutcomeSource, RingBuffer, context_hash, decision_id, policy_from_results,
 )
 from decision_ledger.calibration import CalibrationRecord
-from decision_ledger.policy import load_policy, save_policy
+from decision_ledger.policy import load_policy, policy_from_dict, save_policy
 
 ctx = context_hash("route", prompt_template="...", model_id="...")
 
@@ -70,5 +70,17 @@ result = ConformalCalibrator(target_alpha=0.05, min_sample_size=500)\
 # 4. publish + reload
 policy = policy_from_results({ctx: result}, version_id=42)
 save_policy(policy, "policies/policy-v42.yaml")
-gk.reload_policy(load_policy("policies/policy-v42.yaml").contexts)
+gk.reload_policy(policy_from_dict(load_policy("policies/policy-v42.yaml")).contexts)
+```
+
+For automated versioning + rollback instead of manual `policy-v<N>` naming,
+use `PolicyGenerator`:
+
+```python
+from decision_ledger import PolicyGenerator
+
+gen = PolicyGenerator(policies_dir="policies")
+gen.generate_policy({ctx: result})          # policy_<YYYYMMdd-HHMMSS>.yaml
+artifact = gen.load_latest_policy()
+gk.reload_policy(policy_from_dict(artifact).contexts)
 ```

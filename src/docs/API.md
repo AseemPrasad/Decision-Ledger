@@ -42,7 +42,8 @@ else:
 
 Thread-safe policy swap (RLock). Evaluations in flight finish against the old
 snapshot; subsequent calls observe the new one. E.g. after hourly
-calibration: `gk.reload_policy(load_policy("policies/policy-v1.yaml").contexts)`.
+calibration:
+`gk.reload_policy(policy_from_dict(load_policy("policies/policy-v1.yaml")).contexts)`.
 
 #### `get_metrics() -> dict`
 
@@ -83,13 +84,65 @@ keyed by the 128-bit context hash — pass `.contexts` straight to a
 
 ### `policy_from_results(results, *, version_id, min_sample_size=100) -> ServingPolicy`
 
-Build a policy from `{context_hash: CalibrationResult}`. Contexts without a
-`q_hat` stay inactive.
+Build a serving policy from `{context_hash: CalibrationResult}`. Contexts
+without a `q_hat` stay inactive.
 
-### `save_policy(policy, path) -> Path` / `load_policy(path) -> ServingPolicy`
+### `class PolicyGenerator(policies_dir="data/policies", *, default_alpha=0.05, fail_closed=True, exploration_rate=0.02, min_sample_size_default=100, revoked_contexts=frozenset(), logger=None)`
 
-YAML round-trip. Context hashes serialize as hex; context hashes are the YAML
-keys on re-load.
+Produces the versioned, validated YAML artifacts shipped to gatekeepers.
+
+- `generate_policy(calibration_results, *, policy_version=None, force=False) -> str`
+  — writes `policy_<YYYYMMdd-HHMMSS>.yaml` (timestamp version default) and
+  repoints `policy_latest.yaml` at it. Context state is `ACTIVE` (`q_hat` set
+  and `sample_size >= min_sample_size`), `DRAINING` (`q_hat` `None` or below
+  the minimum sample), or `REVOKED` (context present in `revoked_contexts`,
+  set outside this function). On Windows without symlink privileges the
+  `policy_latest.yaml` link falls back to a plain file copy.
+- `load_latest_policy() -> dict` — load the current `policy_latest.yaml`.
+- `get_policy_history() -> List[str]` — generated versions on disk, newest
+  first.
+- `rollback_policy(target_version) -> str` — republish an older artifact as
+  latest; returns the published path.
+
+### `validate_policy(artifact) -> bool`
+
+Validates a schema-1.0 artifact dict. Always returns `True` or raises
+`PolicyValidationError`, so invalid artifacts cannot pass unnoticed.
+
+### `load_policy(path) -> dict` / `policy_from_dict(artifact) -> ServingPolicy`
+
+`load_policy` parses and validates a schema-1.0 YAML artifact, returning the
+raw dict. `policy_from_dict` converts it back into a `ServingPolicy`,
+**dropping `REVOKED` contexts** (the gatekeeper then fails closed for them):
+
+```python
+gk.reload_policy(policy_from_dict(load_policy("policies/policy-v1.yaml")).contexts)
+```
+
+### `save_policy(policy, path) -> Path`
+
+Writes a `ServingPolicy` as a validated schema-1.0 artifact (legacy
+convenience; use `PolicyGenerator` when you want versioning, history, and
+rollback).
+
+### Artifact format (schema_version `"1.0"`)
+
+```yaml
+schema_version: "1.0"
+policy_version: "20260830-153000"        # YYYYMMdd-HHMMSS
+generated_at: "2026-08-30T15:30:00Z"
+global:
+  default_alpha: 0.05
+  fail_closed: true
+  exploration_rate: 0.02
+  min_sample_size_default: 100
+contexts:
+  - context_ref: "<32-hex>"
+    state: ACTIVE            # ACTIVE | DRAINING | REVOKED
+    q_hat: 0.05              # present when set (required for ACTIVE)
+    sample_size: 500
+    min_sample_size: 100
+```
 
 ## Calibration
 

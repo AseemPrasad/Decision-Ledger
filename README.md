@@ -96,9 +96,10 @@ action = gk.evaluate(ctx, 0.95, "route")
 # 4. Outcomes arrive later; link and re-calibrate (see outcome_logging.py).
 
 # 5. Publish the new policy and reload.
-from decision_ledger.policy import save_policy, load_policy
+from decision_ledger.policy import load_policy, policy_from_dict, save_policy
 save_policy(policy, "policies/policy-v1.yaml")
-gk.reload_policy(load_policy("policies/policy-v1.yaml").contexts)
+artifact = load_policy("policies/policy-v1.yaml")
+gk.reload_policy(policy_from_dict(artifact).contexts)
 ```
 
 Run the ready-made demos:
