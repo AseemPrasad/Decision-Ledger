@@ -136,6 +136,7 @@ decision_ledger/
 - [API](src/docs/API.md) — full reference
 - [Runbook](src/docs/RUNBOOK.md) — operations, monitoring, failure modes
 - [Examples](src/docs/EXAMPLES.md) — end-to-end patterns
+- [Benchmarks](src/docs/BENCHMARKS.md) — measured budgets and methodology
 
 ## Development
 
@@ -151,10 +152,10 @@ coverage report -m -i                      # view report
 > Python 3.14 — Coverage's `--source` rebinding can double-import numpy's C
 > extension (`cannot load module more than once per process`).
 >
-> Benchmark tests (e.g. the gatekeeper's 1000-calls < 1ms budget) run under
+> Benchmark tests (single-eval < 1ms, `pop_batch(1000)` < 100µs) run under
 > plain `pytest`; they are skipped for coverage runs via `-k "not benchmark"`
 > because Coverage's per-line tracing adds overhead to sub-microsecond hot
-> paths.
+> paths. See [Benchmarks](src/docs/BENCHMARKS.md) for the measured numbers.
 >
 > `pyproject.toml` pins tool configs for black, mypy, and pytest; add
 > `[tool.coverage.run]` there if you want coverage settings versioned.

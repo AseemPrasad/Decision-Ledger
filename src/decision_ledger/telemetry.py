@@ -26,7 +26,7 @@ from .utils import now_ns
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DecisionRecord:
     """Immutable record of a single gatekeeper evaluation."""
 
