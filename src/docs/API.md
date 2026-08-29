@@ -93,7 +93,33 @@ keys on re-load.
 
 ## Calibration
 
-### `class ConformalCalibrator(target_alpha=0.05, min_sample_size=500, confidence_level=0.95)`
+### `class ConformalCalibrator(database=None, target_alpha=0.05, min_sample_size=100, confidence_level=0.95)`
+
+`database: Database | None` — when a `Database` is provided, the live
+(`calibrate_context`, `detect_drift`) engine can be used; with no database the
+offline methods below still work on `CalibrationRecord` inputs. `z_score = 1.96`
+(a 95% confidence interval).
+
+`target_alpha` must be in `(0.0, 1.0)`, `min_sample_size >= 1`, and
+`confidence_level` in `(0.0, 1.0)`.
+
+#### `calibrate_context(context_hash: bytes) -> CalibrationResult`
+
+Calibrate one live context from the durable `joined_records` table. Reads every
+joined decision for the context that has an outcome, excludes `EXPLORE_SHADOW`
+records and any decision whose outcomes are not independent
+(`model_verification` only), then computes `q_hat`.
+
+Raises `ValueError` for an invalid context hash or a calibrator without a
+database; `DatabaseError` on store failure.
+
+#### `detect_drift(context_hash: bytes) -> dict`
+
+Compares accuracy on the full confidence range (`EXPLORE_SHADOW` records)
+against the active delegation range (`DELEGATE` records). Returns
+`{"drift_detected", "full_range_accuracy", "active_range_accuracy", "divergence"}`;
+flags drift when the absolute divergence exceeds 5%
+(`DRIFT_DIVERGENCE_THRESHOLD`). Accuracy on an absent range is `0.0`.
 
 #### `compute_threshold(records) -> CalibrationResult`
 
@@ -104,12 +130,20 @@ One context's calibration set. `records` are `CalibrationRecord`s; only
 
 Groups by `context_hash` and calibrates each independently.
 
+#### `_wilson_interval_lower(p, n) -> float` / `wilson_lower_bound(p, n) -> float`
+
+Wilson score interval lower bound for coverage `p` over `n` samples (clamped to
+`>= 0.0`). `wilson_lower_bound` is the backward-compatible public alias.
+
 ### `class CalibrationRecord(context_hash, non_conformity_score, loss, *, is_independent=True, is_exploratory=False)`
 
-### `class CalibrationResult(q_hat, sample_size, coverage_lower_bound, achieved_empirical_risk)`
+### `class CalibrationResult(q_hat, sample_size, coverage_lower_bound, achieved_empirical_risk, min_observed_loss=0.0, max_observed_loss=0.0)`
 
-- `q_hat: float | None` — `None` means "do not activate".
+- `q_hat: float | None` — `None` means "do not activate" (insufficient data or
+  no threshold within the risk budget).
 - `coverage_lower_bound` — Wilson lower bound on P(correct | delegated).
+- `min_observed_loss` / `max_observed_loss` — span of losses in the calibration
+  set (both `0.0` when every decision succeeded).
 
 ## Telemetry
 

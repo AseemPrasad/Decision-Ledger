@@ -125,13 +125,22 @@ CLI (`python -m decision_ledger.outcomes`) records one outcome from the shell.
 
 ### Calibration (`calibration.py`)
 
-Split Conformal Risk Control per context:
+Split Conformal Risk Control per context, backed by the durable
+`joined_records` table:
 
-- only **independent, non-exploratory** records calibrate the live threshold;
+- `ConformalCalibrator(database, ...)` reads each context's joined decisions
+  with an outcome, excluding `EXPLORE_SHADOW` records and any decision whose
+  outcomes are not independent (never `model_verification` — the model
+  verifying itself would self-confirm);
 - sort by non-conformity score, take empirical risk over increasing prefixes;
 - `q_hat` = largest score whose prefix risk `<= alpha`;
 - Wilson lower bound reports finite-sample confidence in coverage;
-- below `min_sample_size`, no threshold is emitted (fail-closed).
+- below `min_sample_size`, no threshold is emitted (fail-closed);
+- `detect_drift(context)` compares accuracy on the full confidence range (shadow
+  exploration) against the active delegation range and alerts when the
+  divergence exceeds 5%. Only independent, non-exploratory records set the live
+  threshold; shadow records feed drift detection.
+- the pure-statistics core (`compute_threshold`) remains for offline demos.
 
 ### Policy (`policy.py`)
 

@@ -24,8 +24,9 @@ pip install -e .
    `python -m decision_ledger.outcomes --decision-id <uuid> --outcome-value 1.0 --source task_metric`
    (or via `OutcomeCollector.log_outcome` in-process).
 4. **Calibrate.** Run the calibration job (cron/hourly):
-   join decisions + outcomes -> `compute_threshold` -> `policy_from_results`
-   -> `save_policy` -> reload in each gatekeeper.
+   join decisions + outcomes -> `ConformalCalibrator(db).calibrate_context(ctx)`
+   -> `policy_from_results` -> `save_policy` -> reload in each gatekeeper.
+   Watch `detect_drift(ctx)` and re-calibrate when it alerts.
 5. **Monitor.** Watch escalation rate, join match rate, per-context
    `q_hat`, and coverage lower bound.
 
