@@ -30,15 +30,16 @@ python src/examples/outcome_logging.py
 ```
 
 Simulates 500 `summarize` decisions through a real gatekeeper + ring buffer,
-attaches task-metric outcomes by `decision_id`, joins them, and reports the
-match rate.
+persists task-metric outcomes to SQLite by `decision_id`, joins them, and
+reports the match rate. Writes `ledger_outcome_demo.db` in the working
+directory.
 
 ## Putting it together
 
 ```python
 from decision_ledger import (
-    ConformalCalibrator, DecisionOutcomeJoiner, Gatekeeper, OutcomeCollector,
-    RingBuffer, context_hash, policy_from_results,
+    ConformalCalibrator, DecisionOutcomeJoiner, InMemoryOutcomeCollector,
+    OutcomeSource, RingBuffer, context_hash, decision_id, policy_from_results,
 )
 from decision_ledger.calibration import CalibrationRecord
 from decision_ledger.policy import load_policy, save_policy
@@ -51,8 +52,11 @@ gk = Gatekeeper(policy_from_results({}, version_id=0).contexts, telemetry=buffer
 action = gk.evaluate(ctx, 0.93, "route")
 
 # 2. later, collect an independent outcome
-outcomes = OutcomeCollector()
-outcomes.record(b"decision-id-16-bytes", outcome_value=1.0)
+#    (durable equivalent: OutcomeCollector(Database("ledger.db")).log_outcome(
+#     decision_id, 1.0, OutcomeSource.TASK_METRIC), or the outcomes CLI)
+outcomes = InMemoryOutcomeCollector()
+outcomes.record(decision_id(), outcome_value=1.0,
+                outcome_source=OutcomeSource.TASK_METRIC)
 
 # 3. join + calibrate
 decisions = buffer.pop_batch()

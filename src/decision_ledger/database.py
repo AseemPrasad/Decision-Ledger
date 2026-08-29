@@ -22,10 +22,11 @@ Design notes (MVP):
   rollback journal keeps the ledger a single file. A ``busy_timeout`` plus
   the locked retry above covers contention.
 * **``outcome_source`` is TEXT** per the schema
-  (``'human'``, ``'task_metric'``, ``'model_verification'``). The in-memory
-  domain type :class:`~decision_ledger.outcomes.OutcomeSource` is an int
-  enum; use :func:`outcome_source_to_text` / :func:`outcome_source_from_text`
-  at the boundary.
+  (``'human'``, ``'task_metric'``, ``'model_verification'``). The domain type
+  :class:`~decision_ledger.outcomes.OutcomeSource` is a string enum, so its
+  ``.value`` is stored directly with no conversion. The legacy
+  :func:`outcome_source_to_text` / :func:`outcome_source_from_text` helpers
+  keep an int->text mapping only for older callers.
 * **``:memory:`` caveat** -- each thread gets its *own* connection, so an
   in-memory database is per-thread by construction. Use a file path for any
   database shared across threads.
@@ -65,7 +66,8 @@ class DatabaseIntegrityError(DatabaseError):
     """Raised when an operation violates a constraint (PK, FK, NOT NULL)."""
 
 
-# outcome_source ints mirror decision_ledger.outcomes.OutcomeSource in order.
+# Legacy int->text mapping. Deprecated: OutcomeSource is now a string enum
+# whose .value matches the schema column directly, so no conversion is needed.
 OUTCOME_SOURCE_TEXT: tuple[str, ...] = (
     "human",
     "task_metric",
@@ -75,14 +77,14 @@ OUTCOME_SOURCE_TEXT: tuple[str, ...] = (
 
 
 def outcome_source_to_text(source: int) -> str:
-    """Map an :class:`OutcomeSource` int to the ``outcomes.outcome_source`` TEXT value."""
+    """Deprecated: map a legacy ``OutcomeSource`` int to TEXT for the ``outcomes`` column."""
     if not 0 <= source < len(OUTCOME_SOURCE_TEXT):
         raise ValueError(f"unknown outcome source: {source}")
     return OUTCOME_SOURCE_TEXT[source]
 
 
 def outcome_source_from_text(text: str) -> int:
-    """Map an ``outcomes.outcome_source`` TEXT value back to an :class:`OutcomeSource` int."""
+    """Deprecated: map ``outcomes.outcome_source`` TEXT back to a legacy ``OutcomeSource`` int."""
     try:
         return OUTCOME_SOURCE_TEXT.index(text)
     except ValueError:

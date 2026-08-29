@@ -30,6 +30,7 @@ from .gatekeeper import (
 )
 from .outcomes import (
     DecisionOutcomeJoiner,
+    InMemoryOutcomeCollector,
     JoinedRecord,
     OutcomeCollector,
     OutcomeRecord,
@@ -73,6 +74,7 @@ __all__ = [
     "DecisionType",
     "GateAction",
     "Gatekeeper",
+    "InMemoryOutcomeCollector",
     "JoinedRecord",
     "JsonlExport",
     "OutcomeCollector",

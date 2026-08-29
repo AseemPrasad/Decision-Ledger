@@ -9,10 +9,12 @@ import random
 from decision_ledger import (
     CalibrationRecord,
     ConformalCalibrator,
+    Database,
     DecisionOutcomeJoiner,
     GateAction,
     Gatekeeper,
     OutcomeCollector,
+    OutcomeRecord,
     OutcomeSource,
     RingBuffer,
     context_hash,
@@ -49,18 +51,50 @@ def test_full_decision_loop(tmp_path):
     assert len(decisions) == 400
 
     # Outcomes arrive asynchronously: model is right when confident > 0.7.
-    collector = OutcomeCollector()
-    for decision in decisions:
-        correct = decision.model_confidence > 0.7
-        collector.record(
-            decision.decision_id,
-            outcome_value=1.0 if correct else 0.0,
-            outcome_source=OutcomeSource.TASK_METRIC,
+    # Decisions must already be durable in SQLite (as the BatchConsumer would
+    # have drained them) so the collector's FK check passes.
+    ledger = Database(str(tmp_path / "ledger.db"))
+    try:
+        ledger.batch_insert(
+            "decisions",
+            [
+                {
+                    "decision_id": decision.decision_id,
+                    "timestamp_ns": decision.timestamp_ns,
+                    "context_hash": decision.context_hash,
+                    "decision_type": decision.decision_type,
+                    "model_confidence": decision.model_confidence,
+                    "non_conformity": decision.non_conformity,
+                    "action_taken": decision.action_taken,
+                    "latency_us": decision.latency_us,
+                }
+                for decision in decisions
+            ],
         )
-    assert len(list(collector.iter_records())) == 400
+        collector = OutcomeCollector(ledger)
+        for decision in decisions:
+            correct = decision.model_confidence > 0.7
+            collector.log_outcome(
+                decision.decision_id,
+                outcome_value=1.0 if correct else 0.0,
+                outcome_source=OutcomeSource.TASK_METRIC,
+            )
+        outcomes = [
+            OutcomeRecord(
+                decision_id=row["decision_id"],
+                outcome_timestamp_ns=row["timestamp_ns"],
+                outcome_source=OutcomeSource(row["outcome_source"]),
+                outcome_value=row["outcome_value"],
+                metadata=row.get("metadata"),
+            )
+            for row in ledger.get_outcomes()
+        ]
+    finally:
+        ledger.close()
+    assert len(outcomes) == 400
 
     # Join decisions to outcomes.
-    joiner = DecisionOutcomeJoiner(collector.iter_records())
+    joiner = DecisionOutcomeJoiner(outcomes)
     joined = joiner.join(decisions)
     assert len(joined) == 400
 

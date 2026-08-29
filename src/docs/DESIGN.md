@@ -112,9 +112,13 @@ exports and debugging.
 
 ### Outcomes (`outcomes.py`)
 
-`OutcomeRecord` links an independent result (human=0, task_metric=1,
-model_verification=2, user_report=3) to a past decision by `decision_id`.
-`DecisionOutcomeJoiner` produces `JoinedRecord`s (the calibration input).
+`OutcomeRecord` links an independent result (human, task metric, model
+verification, user report) to a past decision by `decision_id`. The durable
+`OutcomeCollector` validates and persists outcomes to SQLite with a
+string-valued `OutcomeSource` enum (`'human'`, `'task_metric'`, ...);
+`InMemoryOutcomeCollector` keeps the offline demo/test path.
+`DecisionOutcomeJoiner` produces `JoinedRecord`s (the calibration input). A
+CLI (`python -m decision_ledger.outcomes`) records one outcome from the shell.
 
 ### Calibration (`calibration.py`)
 

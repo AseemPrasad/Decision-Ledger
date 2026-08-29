@@ -169,19 +169,57 @@ Writes JSONL under `output_dir/decisions/date=YYYY-MM-DD/hour=HH/`.
 
 ## Outcomes
 
-### `class OutcomeCollector(paths=None)`
+### `class OutcomeSource(Enum)`
 
-- `record(decision_id, outcome_value, *, outcome_source=0, metadata=None)`
+String values, matched 1:1 to the schema TEXT column:
+
+- `HUMAN = "human"`
+- `TASK_METRIC = "task_metric"`
+- `MODEL_VERIFICATION = "model_verification"`
+- `USER_REPORT = "user_report"`
+
+### `class OutcomeCollector(database: Database)`
+
+Validates every outcome (decision exists, value in `[0.0, 1.0]`, known source,
+JSON metadata) and persists it to the `outcomes` table via `batch_insert`;
+each record is stamped with a UUIDv7 `outcome_id`.
+
+- `log_outcome(decision_id, outcome_value, outcome_source, metadata="") -> str`
+  — logs one outcome for an existing decision; returns the generated
+  `outcome_id`. Raises `DecisionNotFoundError`, `InvalidOutcomeValueError`,
+  `InvalidOutcomeSourceError` or `InvalidMetadataError` on bad input.
+- `log_outcomes_batch(records) -> list[str]` — all-or-nothing batch; each
+  dict needs `decision_id`, `outcome_value` and `source` (or `outcome_source`),
+  plus optional `metadata`. Any invalid record rejects the whole batch.
+- `get_outcome(outcome_id) -> dict | None`
+- `get_outcomes_for_decision(decision_id) -> list[dict]` — oldest first.
+- `get_metrics() -> dict` — `outcomes_logged`, `batches_logged`, `last_logged_at`.
+
+Row dicts carry the TEXT `outcome_source` and `metadata` as a JSON string (or
+`None`).
+
+### CLI
+
+```bash
+python -m decision_ledger.outcomes --decision-id <uuid> \
+    --outcome-value <0.0-1.0> --source <human|task_metric|model_verification|user_report> \
+    [--metadata '<json>'] [--db ledger.db]
+```
+
+Exit codes: `0` success, `2` usage/validation error, `3` database error.
+
+### `class InMemoryOutcomeCollector(paths=None)`
+
+Offline collector for demos and tests (no database); validates with the same
+rules as `OutcomeCollector`:
+
+- `record(decision_id, outcome_value, *, outcome_source=..., metadata=None)`
 - `iter_records()`, `export(path)`, `import_file(path)`
 
 ### `class DecisionOutcomeJoiner(outcomes=None)`
 
 - `add_outcome(outcome)`
 - `join(decisions) -> list[JoinedRecord]` — only decisions with an outcome.
-
-### `class OutcomeSource`
-
-`HUMAN = 0`, `TASK_METRIC = 1`, `MODEL_VERIFICATION = 2`, `USER_REPORT = 3`.
 
 ### `class JoinedRecord(...)`
 

@@ -1,25 +1,38 @@
 """outcome_logging.py
 
 Shows the outcome side of the ledger: decisions flow through the gatekeeper
-into the ring buffer, a human/task outcome arrives later, and the joiner
-links the two. The joined records are exactly what the calibration engine
-consumes.
+into the ring buffer, a task-metric outcome arrives later and is persisted to
+SQLite, and the joiner links decisions to outcomes. Joined records are exactly
+what the calibration engine consumes.
 
 Run: python src/examples/outcome_logging.py
 """
 
 import random
+from pathlib import Path
 
 from decision_ledger import (
+    Database,
     DecisionOutcomeJoiner,
     Gatekeeper,
     OutcomeCollector,
+    OutcomeRecord,
     OutcomeSource,
     RingBuffer,
     policy_from_results,
 )
 from decision_ledger.calibration import CalibrationResult
 from decision_ledger.utils import context_hash
+
+
+def _outcome_record(row: dict) -> OutcomeRecord:
+    return OutcomeRecord(
+        decision_id=row["decision_id"],
+        outcome_timestamp_ns=row["timestamp_ns"],
+        outcome_source=OutcomeSource(row["outcome_source"]),
+        outcome_value=row["outcome_value"],
+        metadata=row.get("metadata"),
+    )
 
 
 def main() -> None:
@@ -45,20 +58,28 @@ def main() -> None:
     decisions = buffer.pop_batch(max_records=10_000)
 
     # Outcomes trickle in over time, independent of the serving path.
-    collector = OutcomeCollector()
-    for decision in decisions:
-        correct = decision.model_confidence > 0.8
-        collector.record(
-            decision.decision_id,
-            outcome_value=1.0 if correct else 0.0,
-            outcome_source=OutcomeSource.TASK_METRIC,
+    ledger = Database(str(Path.cwd() / "ledger_outcome_demo.db"))
+    try:
+        collector = OutcomeCollector(ledger)
+        outcome_ids = collector.log_outcomes_batch(
+            [
+                {
+                    "decision_id": decision.decision_id,
+                    "outcome_value": 1.0 if decision.model_confidence > 0.8 else 0.0,
+                    "source": OutcomeSource.TASK_METRIC,
+                }
+                for decision in decisions
+            ]
         )
+        outcomes = [_outcome_record(row) for row in ledger.get_outcomes()]
+    finally:
+        ledger.close()
 
-    joiner = DecisionOutcomeJoiner(collector.iter_records())
+    joiner = DecisionOutcomeJoiner(outcomes)
     joined = joiner.join(decisions)
 
     print(f"decisions logged   : {len(decisions)}")
-    print(f"outcomes collected : {len(list(collector.iter_records()))}")
+    print(f"outcome ids logged : {len(outcome_ids)}")
     print(f"joined records     : {len(joined)}")
     print(f"match rate         : {len(joined) / len(decisions):.2f}")
     if joined:

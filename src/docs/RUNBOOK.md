@@ -20,7 +20,9 @@ pip install -e .
    `JsonlExport` writes ad-hoc date/hour JSONL when you need a human-readable
    export.
 3. **Collect outcomes.** Whenever an independent result is known (auto task
-   metric, human review), record it with the original `decision_id`.
+   metric, human review), record it with the original `decision_id`:
+   `python -m decision_ledger.outcomes --decision-id <uuid> --outcome-value 1.0 --source task_metric`
+   (or via `OutcomeCollector.log_outcome` in-process).
 4. **Calibrate.** Run the calibration job (cron/hourly):
    join decisions + outcomes -> `compute_threshold` -> `policy_from_results`
    -> `save_policy` -> reload in each gatekeeper.
@@ -30,15 +32,13 @@ pip install -e .
 ## Status checks
 
 ```bash
-# Count decisions and matches
+# Count decisions and outcomes in the ledger database
 python - <<'PY'
-import json
-from collections import Counter
-from pathlib import Path
-files = Path("logs/decisions").rglob("*.jsonl")
-n_decisions = sum(sum(1 for _ in f.open()) for f in files)
-n_outcomes = sum(1 for f in Path("logs/outcomes.jsonl").open())
-print("decisions", n_decisions, "outcomes", n_outcomes)
+from decision_ledger import Database
+db = Database("ledger.db")
+print("decisions", len(db.get_decisions()))
+print("outcomes", len(db.get_outcomes()))
+db.close()
 PY
 ```
 
