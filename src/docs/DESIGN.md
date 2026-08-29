@@ -108,7 +108,10 @@ the SQLite `decisions` table (`database.py`) in one `batch_insert`
 transaction. Failed flushes are retried twice, then buffered in memory (100k
 cap, critical alert above 50k) so an outage costs latency, not completeness.
 `JsonlExport` keeps the earlier date/hour-partitioned JSONL writer for ad-hoc
-exports and debugging.
+exports and debugging. The SQLite `Joiner` (`database.py`) materializes the
+`joined_records` table with an idempotent `INSERT ... SELECT` LEFT JOIN over
+decisions and outcomes (one row per decision; `get_join_statistics()` reports
+the decision/outcome match rate).
 
 ### Outcomes (`outcomes.py`)
 

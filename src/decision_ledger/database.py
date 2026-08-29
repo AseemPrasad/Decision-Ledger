@@ -44,7 +44,7 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, List, Optional, TypeVar
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -551,3 +551,153 @@ class Database:
                 (decision_id,),
             )
         return [dict(row) for row in rows]
+
+    # ------------------------------------------------------------------ #
+    # Joined records
+    # ------------------------------------------------------------------ #
+
+    @property
+    def joiner(self) -> "Joiner":
+        """A :class:`Joiner` bound to this database (stateless, cheap to build)."""
+        return Joiner(self)
+
+    def get_joined_records(
+        self,
+        context_hash: Optional[bytes] = None,
+        include_unmatched: bool = True,
+    ) -> List[dict[str, Any]]:
+        """Query the materialized ``joined_records`` table.
+
+        Args:
+            context_hash: If given, only rows for this 16-byte context hash
+                (raw bytes, not hex).
+            include_unmatched: When ``False``, only rows with a non-null
+                ``outcome_value`` are returned (decisions that actually have
+                an outcome).
+
+        Returns:
+            List of joined rows as dicts, oldest decision first.
+            ``outcome_value`` / ``latency_delta_ns`` are ``None`` for
+            decisions that have not received an outcome yet.
+        """
+        clauses: List[str] = []
+        params: List[Any] = []
+        if context_hash is not None:
+            clauses.append("context_hash = ?")
+            params.append(context_hash)
+        if not include_unmatched:
+            clauses.append("outcome_value IS NOT NULL")
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        query = (
+            "SELECT * FROM joined_records" f"{where} ORDER BY decision_timestamp_ns ASC"
+        )
+        rows = self.execute_query(query, tuple(params))
+        return [dict(row) for row in rows]
+
+    def get_join_statistics(self) -> Dict[str, Any]:
+        """Return current decision/outcome join statistics.
+
+        ``match_rate`` is the fraction of decisions that have at least one
+        outcome (``joined_count / total_decisions``). It is computed directly
+        from the ``decisions`` and ``outcomes`` tables, so it is accurate even
+        before a :class:`Joiner` run materializes ``joined_records``.
+
+        Returns:
+            ``total_decisions``, ``total_outcomes``, ``joined_count`` (distinct
+            decisions with an outcome) and ``match_rate`` in [0.0, 1.0].
+        """
+        rows = self.execute_query(
+            "SELECT"
+            " (SELECT COUNT(*) FROM decisions) AS total_decisions,"
+            " (SELECT COUNT(*) FROM outcomes) AS total_outcomes,"
+            " (SELECT COUNT(DISTINCT decision_id) FROM outcomes) AS joined_count"
+        )
+        row = rows[0]
+        total_decisions = int(row["total_decisions"])
+        joined_count = int(row["joined_count"])
+        return {
+            "total_decisions": total_decisions,
+            "total_outcomes": int(row["total_outcomes"]),
+            "joined_count": joined_count,
+            "match_rate": (joined_count / total_decisions if total_decisions else 0.0),
+        }
+
+
+class Joiner:
+    """Materialize decision-outcome joins into the ``joined_records`` table.
+
+    A single ``INSERT ... SELECT`` with a LEFT JOIN writes every decision once
+    (matched or not). ``joined_id`` is set to the source ``decision_id``, so
+    ``ON CONFLICT(joined_id) DO NOTHING`` makes re-runs idempotent: a decision
+    is joined at most once and a later run inserts nothing. A decision with
+    several outcomes keeps the first-inserted outcome (one row per decision).
+
+    The read side (``get_joined_records`` / ``get_join_statistics``) lives on
+    :class:`Database`; it is mirrored here for convenience.
+    """
+
+    def __init__(self, database: Database) -> None:
+        self.database = database
+
+    def join_decisions_and_outcomes(
+        self,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+    ) -> int:
+        """Join decisions to outcomes and write one ``joined_records`` row each.
+
+        Args:
+            start_time: If given, only decisions with
+                ``timestamp_ns > start_time`` are joined.
+            end_time: If given, only decisions with
+                ``timestamp_ns < end_time`` are joined.
+
+        Returns:
+            Number of joined rows actually inserted (``0`` on an idempotent
+            re-run).
+
+        Raises:
+            DatabaseError: On a persistent store failure.
+        """
+        clauses: List[str] = []
+        params: List[Any] = []
+        if start_time is not None:
+            clauses.append("d.timestamp_ns > ?")
+            params.append(start_time)
+        if end_time is not None:
+            clauses.append("d.timestamp_ns < ?")
+            params.append(end_time)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+
+        statement = (
+            "INSERT INTO joined_records ("
+            " joined_id, decision_id, context_hash, decision_type,"
+            " model_confidence, non_conformity, action_taken, outcome_value,"
+            " decision_timestamp_ns, outcome_timestamp_ns, latency_delta_ns"
+            ") SELECT"
+            " d.decision_id, d.decision_id, d.context_hash, d.decision_type,"
+            " d.model_confidence, d.non_conformity, d.action_taken,"
+            " o.outcome_value, d.timestamp_ns, o.timestamp_ns,"
+            " o.timestamp_ns - d.timestamp_ns"
+            " FROM decisions d"
+            " LEFT JOIN outcomes o ON o.decision_id = d.decision_id"
+            f"{where}"
+            " ON CONFLICT(joined_id) DO NOTHING"
+        )
+        created = self.database.execute_write(statement, tuple(params))
+        logger.info("[Joined %d decision(s) into joined_records]", created)
+        return created
+
+    def get_joined_records(
+        self,
+        context_hash: Optional[bytes] = None,
+        include_unmatched: bool = True,
+    ) -> List[dict[str, Any]]:
+        """Convenience: same as :meth:`Database.get_joined_records`."""
+        return self.database.get_joined_records(
+            context_hash=context_hash, include_unmatched=include_unmatched
+        )
+
+    def get_join_statistics(self) -> Dict[str, Any]:
+        """Convenience: same as :meth:`Database.get_join_statistics`."""
+        return self.database.get_join_statistics()

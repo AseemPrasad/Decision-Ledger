@@ -227,6 +227,41 @@ rules as `OutcomeCollector`:
 action_taken, outcome_source, outcome_value, decision_timestamp_ns,
 outcome_timestamp_ns`. Properties: `latency_delta_ns`, `loss` (0.0/1.0).
 
+## Joining (`database.py`)
+
+`Joiner` materializes the `joined_records` table with one `INSERT ... SELECT`
+LEFT JOIN over `decisions` and `outcomes`. `joined_id` equals the source
+`decision_id`, so `ON CONFLICT(joined_id) DO NOTHING` makes re-runs
+idempotent (a decision is joined at most once).
+
+### `class Joiner(database: Database)`
+
+- `database.joiner` — property on `Database` returning a bound `Joiner`.
+- `join_decisions_and_outcomes(start_time=None, end_time=None) -> int` —
+  joins decisions to outcomes (LEFT JOIN; unmatched decisions get a row with
+  `outcome_value = NULL`) and returns the number of rows actually inserted.
+  Optional strict time bounds: `d.timestamp_ns > start_time`,
+  `d.timestamp_ns < end_time`.
+- `get_joined_records(...)` / `get_join_statistics()` — delegate to the
+  `Database` methods below.
+
+### `Database.get_joined_records(context_hash=None, include_unmatched=True) -> list[dict]`
+
+Rows from `joined_records`, oldest decision first. `context_hash` filters by
+raw 16-byte hash; `include_unmatched=False` drops rows with
+`outcome_value IS NULL`.
+
+### `Database.get_join_statistics() -> dict`
+
+```
+{"total_decisions": int, "total_outcomes": int,
+ "joined_count": int, "match_rate": float}
+```
+
+`joined_count` is the number of distinct decisions with at least one outcome
+(from the `outcomes` table, so it is accurate even before a join runs);
+`match_rate = joined_count / total_decisions` (0.0 on an empty ledger).
+
 ## Helpers
 
 ### `context_hash(decision_type, *, prompt_template=None, model_id=None, model_weights_sha256=None, quantization_format=None, adapter_config_hash=None, temperature=None) -> bytes`
