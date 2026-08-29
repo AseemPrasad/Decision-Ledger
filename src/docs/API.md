@@ -139,7 +139,28 @@ serializes to the JSONL record shape.
 
 ## Consumer
 
-### `class BatchConsumer(ring_buffer, output_dir, flush_interval_ms=100, batch_size=10_000, poll_interval_ms=1)`
+### `class BatchConsumer(ring_buffer, database, flush_interval=5.0, batch_size=5_000, daemon=True)`
+
+A `threading.Thread` (daemon by default) that polls `RingBuffer.pop_batch`
+(max 1000 per poll, 100ms cadence) and flushes the accumulated batch to the
+SQLite `decisions` table via `Database.batch_insert` — the durable copy of
+the ledger.
+
+- Flush triggers: `batch_size` records accumulated, or `flush_interval`
+  seconds since the last successful flush.
+- Failure handling: a failed flush is retried twice with a short backoff,
+  then buffered in memory (100k cap; the oldest are dropped and counted once
+  the cap is hit; a critical alert fires above 50k).
+- `start()` — inherited from `Thread` (single-shot; errors on restart).
+- `stop(timeout=10.0)` — signals shutdown, joins the loop thread, then does a
+  final flush of whatever remains.
+- `get_metrics() -> dict` — `total_records_processed`, `total_records_flushed`,
+  `total_records_dropped`, `total_flushes`, `last_flush_time`,
+  `avg_flush_time_ms`, `backlog_records`.
+
+`JsonlExport` (`JsonlExport(ring_buffer, output_dir, flush_interval_ms=100,
+batch_size=10_000, poll_interval_ms=1)`) is the same poll/flush shape but
+writes ad-hoc date/hour-partitioned JSONL:
 
 - `start()` / `stop()` — daemon thread over the ring buffer.
 - `drain_now() -> int` — synchronous drain (tests/ops).

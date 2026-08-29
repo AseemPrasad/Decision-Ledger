@@ -29,7 +29,7 @@ has capacity.
                            │    pop_batch(1000) on ~1ms poll, background thread
                            ▼
                   ┌──────────────────────┐
-                  │    BatchConsumer     │──▶ decisions/date=…/hour=…/*.jsonl
+                  │    BatchConsumer     │──▶ SQLite decisions table (durable)
                   └───────┬──────────────┘
                           │   outcomes arrive later (off-path)
                           ▼
@@ -48,7 +48,7 @@ has capacity.
 | `Gatekeeper` | `gatekeeper.py` | The **only** object a request touches. Maps a 16-byte context hash + confidence to `DELEGATE` / `ESCALATE` / `EXPLORE_SHADOW`. Fail-closed: unknown context, inactive context, insufficient samples, or a missing `q_hat` all escalate. |
 | `DecisionRecord` | `telemetry.py` | Frozen, `slots=True` dataclass: one immutable record per evaluation (UUIDv7 id, timestamp, context hash, confidence, action, measured latency). |
 | `RingBuffer` | `telemetry.py` | Bounded single-producer buffer (`deque(maxlen=capacity)`). `push` never blocks or raises; `pop_batch` drains FIFO. Explicit backpressure tiers warn before overload; drops are **counted**, never a crash. |
-| `BatchConsumer` | `consumer.py` | Background daemon thread that polls `pop_batch` and writes newline-delimited JSON. Keeps the producer off the disk. |
+| `BatchConsumer` | `consumer.py` | Background daemon thread that polls `pop_batch` and flushes batches to the SQLite `decisions` table in one transaction. Failed flushes are retried twice, then buffered in memory (100k cap) so the ledger never loses what it holds. Keeps the producer off the disk. (`JsonlExport` is the ad-hoc JSONL sink.) |
 | `CalibrationContext` / `ServingPolicy` | `gatekeeper.py`, `policy.py` | Per-context operating envelope (`q_hat`, sample size, active flag) shipped as a versioned YAML artifact and swapped into the gatekeeper atomically. |
 | `utils.context_hash` | `utils.py` | Distills prompt/model/weights/quantization/adapter/temperature into a 16-byte context key. Change any factor → brand-new context → gatekeeper fails closed until recalibrated. |
 

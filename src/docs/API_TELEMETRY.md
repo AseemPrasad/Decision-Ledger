@@ -131,7 +131,7 @@ Used internally by `Gatekeeper.evaluate`; identical for tests and scripts.
 record.to_dict()  # dict with context_hash hex-encoded, JSONL-friendly
 ```
 
-The `BatchConsumer` writes one `json.loads(to_dict())` line per record.
+The `JsonlExport` consumer writes one `json.loads(to_dict())` line per record.
 
 ## Performance characteristics
 

@@ -16,7 +16,9 @@ pip install -e .
 1. **Serve.** Applications call `Gatekeeper.evaluate(...)` inline; every call
    is recorded in a ring buffer.
 2. **Drain.** Run a `BatchConsumer` (sidecar thread or process) to flush the
-   buffer to `logs/` / `output_dir/decisions/`.
+   buffer to SQLite (`ledger.db`, the durable `decisions` table).
+   `JsonlExport` writes ad-hoc date/hour JSONL when you need a human-readable
+   export.
 3. **Collect outcomes.** Whenever an independent result is known (auto task
    metric, human review), record it with the original `decision_id`.
 4. **Calibrate.** Run the calibration job (cron/hourly):

@@ -41,7 +41,7 @@ calibration data.
                 └─▶ RingBuffer (every decision logged)
                        │
                        ▼  async
-                 BatchConsumer ──▶ JSONL / over time: Parquet+S3
+                 BatchConsumer ──▶ SQLite (durable) · JsonlExport ─▶ JSONL
                        │
                        ▼
                  Outcome Collector ──▶ Joiner (by decision_id)
@@ -117,7 +117,8 @@ decision_ledger/
 │   ├── decision_ledger/        # the package
 │   │   ├── gatekeeper.py       # hot-path enforcement (fail-closed)
 │   │   ├── telemetry.py        # ring buffer + decision records
-│   │   ├── consumer.py         # batch drain to JSONL
+│   │   ├── consumer.py         # batch drain: SQLite consumer + JSONL export
+│   │   ├── database.py         # SQLite persistence (decisions/outcomes/joins)
 │   │   ├── outcomes.py         # outcome collection + joining
 │   │   ├── calibration.py      # Split Conformal Risk Control
 │   │   ├── policy.py           # versioned policy artifacts (YAML)

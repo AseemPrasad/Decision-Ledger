@@ -106,10 +106,10 @@ def _placeholder_result():
 
 
 def test_consumer_writes_jsonl(tmp_path):
-    from decision_ledger import BatchConsumer
+    from decision_ledger import JsonlExport
 
     ctx, buffer = _build_synthetic_stream()
-    consumer = BatchConsumer(buffer, tmp_path / "ledger", flush_interval_ms=50)
+    consumer = JsonlExport(buffer, tmp_path / "ledger", flush_interval_ms=50)
     written = consumer.drain_now()
     assert written == 400
 

@@ -43,7 +43,7 @@ calibration data.
                 └──────────┬──────────┘
                            ▼  (async)
                 ┌─────────────────────┐
-                │  BatchConsumer      │  writes JSONL (MVP) / Parquet (prod)
+                │  BatchConsumer      │  SQLite (durable) · JsonlExport (ad-hoc JSONL)
                 └──────────┬──────────┘
                            ▼
                 ┌─────────────────────┐
@@ -103,9 +103,12 @@ single-producer contract.
 
 ### Consumer (`consumer.py`)
 
-Background thread that drains the ring buffer and flushes newline-delimited
-JSON partitioned by date/hour under `output_dir/decisions/`. Replaces the
-production Parquet/S3 writer with zero extra dependencies.
+Daemon `BatchConsumer` thread drains the ring buffer and flushes batches to
+the SQLite `decisions` table (`database.py`) in one `batch_insert`
+transaction. Failed flushes are retried twice, then buffered in memory (100k
+cap, critical alert above 50k) so an outage costs latency, not completeness.
+`JsonlExport` keeps the earlier date/hour-partitioned JSONL writer for ad-hoc
+exports and debugging.
 
 ### Outcomes (`outcomes.py`)
 

@@ -112,18 +112,42 @@ print(records[0].to_dict())
 #  'action_taken': 'DELEGATE', 'latency_us': 6}
 ```
 
-**Durable JSONL** via the background consumer — it drains off the hot path
-and writes partition directories under `output_dir/decisions/date=…/hour=…/`:
+**Durable SQLite** via the background `BatchConsumer` thread — it drains off
+the hot path and flushes batches to the `decisions` table in one transaction:
 
 ```python
-from decision_ledger.consumer import BatchConsumer
+from decision_ledger import BatchConsumer, Database
+from decision_ledger.telemetry import DecisionRecord
+from decision_ledger.utils import generate_uuidv7
 
-consumer = BatchConsumer(ring_buffer=buffer, output_dir="ledger-out")
+buffer.push(DecisionRecord(             # one more decision to persist
+    decision_id=generate_uuidv7(),
+    timestamp_ns=0,
+    context_hash=ctx,
+    decision_type="route",
+    model_confidence=0.95,
+    non_conformity=0.05,
+    action_taken="DELEGATE",
+    latency_us=6,
+))
+db = Database("ledger.db")
+consumer = BatchConsumer(ring_buffer=buffer, database=db)
 consumer.start()
-# ... keep serving ... (evaluate() calls append to the buffer, never block on disk)
-consumer.stop()                      # flush + stop the daemon thread
-consumer.drain_now()                 # or: synchronous drain at any time
+# ... evaluate() calls append to the buffer; the consumer drains off the hot path
+consumer.stop()                        # signal the loop, final flush, join the thread
+
+rows = db.get_decisions()
+print(len(rows), rows[0]["context_hash"].hex())   # durable rows: dicts, bytes hash
+db.close()
 ```
+
+The consumer retries a failed flush twice, then keeps the records in memory
+(100k cap, critical alert above 50k) instead of losing them — an outage costs
+latency, not completeness. Webhook `consumer.get_metrics()` for
+processed/flushed/dropped counts.
+
+For ad-hoc JSONL export (date/hour partitioned, e.g. debug dumps) use
+`JsonlExport(ring_buffer=buffer, output_dir="ledger-out")` instead.
 
 **Roll-up metrics** from the gatekeeper itself (does not touch the buffer):
 

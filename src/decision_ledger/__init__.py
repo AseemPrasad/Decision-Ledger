@@ -13,7 +13,7 @@ from .calibration import (
     CalibrationResult,
     ConformalCalibrator,
 )
-from .consumer import BatchConsumer
+from .consumer import BatchConsumer, JsonlExport
 from .database import (
     Database,
     DatabaseError,
@@ -74,6 +74,7 @@ __all__ = [
     "GateAction",
     "Gatekeeper",
     "JoinedRecord",
+    "JsonlExport",
     "OutcomeCollector",
     "OutcomeRecord",
     "OutcomeSource",
