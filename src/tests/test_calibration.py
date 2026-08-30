@@ -5,9 +5,17 @@ database-backed context calibration (``calibrate_context``) and drift
 detection (``detect_drift``), plus every documented edge case.
 """
 
+import math
+
 import pytest
 
-from decision_ledger import CalibrationRecord, ConformalCalibrator, Database
+from decision_ledger import (
+    CalibrationRecord,
+    ConformalCalibrator,
+    Database,
+    PolicyGenerator,
+)
+from decision_ledger.policy import load_policy, validate_policy
 
 CTX = bytes(range(16))
 OTHER_CTX = bytes(reversed(range(16)))
@@ -29,15 +37,21 @@ def record(
     )
 
 
-def decision_row(decision_id: str, *, context: bytes = CTX) -> dict:
+def decision_row(
+    decision_id: str,
+    *,
+    context: bytes = CTX,
+    score: float = 0.1,
+    action: str = "DELEGATE",
+) -> dict:
     return {
         "decision_id": decision_id,
         "timestamp_ns": 1,
         "context_hash": context,
         "decision_type": "route",
-        "model_confidence": 0.9,
-        "non_conformity": 0.1,
-        "action_taken": "DELEGATE",
+        "model_confidence": 1.0 - score,
+        "non_conformity": score,
+        "action_taken": action,
         "latency_us": 5,
     }
 
@@ -66,13 +80,17 @@ def joined_row(
 
 
 def outcome_row(
-    decision_id: str, *, source: str = "task_metric", outcome_id: str | None = None
+    decision_id: str,
+    *,
+    source: str = "task_metric",
+    outcome_id: str | None = None,
+    value: float = 1.0,
 ) -> dict:
     return {
         "outcome_id": outcome_id if outcome_id is not None else f"o-{decision_id}",
         "decision_id": decision_id,
         "timestamp_ns": 2,
-        "outcome_value": 1.0,
+        "outcome_value": value,
         "outcome_source": source,
         "metadata": None,
     }
@@ -121,8 +139,38 @@ def db(tmp_path):
     database.close()
 
 
-def calibrator(database=None, **kwargs) -> ConformalCalibrator:
+def make_calibrator(database=None, **kwargs) -> ConformalCalibrator:
     return ConformalCalibrator(database, **kwargs)
+
+
+@pytest.fixture
+def sample_decisions() -> list[dict]:
+    """Decision rows spanning the full confidence range (high to low)."""
+    confidences = [0.99, 0.95, 0.90, 0.85, 0.80, 0.75, 0.70, 0.65, 0.60, 0.55]
+    return [
+        decision_row(
+            f"sd-{index}",
+            score=round(1.0 - confidence, 2),
+            action="DELEGATE",
+        )
+        for index, confidence in enumerate(confidences)
+    ]
+
+
+@pytest.fixture
+def sample_outcomes(sample_decisions: list[dict]) -> list[dict]:
+    """Outcome rows of varying quality, one per sample decision."""
+    qualities = [1.0, 1.0, 0.9, 0.5, 0.0, 1.0, 0.75, 0.4, 0.0, 1.0]
+    return [
+        outcome_row(decision["decision_id"], value=quality)
+        for decision, quality in zip(sample_decisions, qualities)
+    ]
+
+
+@pytest.fixture
+def calibrator(db) -> ConformalCalibrator:
+    """A calibrator bound to the temporary test database."""
+    return ConformalCalibrator(db)
 
 
 # --------------------------------------------------------------------------- #
@@ -157,7 +205,7 @@ def test_defaults_match_split_conformal_risk_control_spec():
 
 
 def test_empty_records_returns_no_threshold():
-    result = calibrator(min_sample_size=100).compute_threshold([])
+    result = make_calibrator(min_sample_size=100).compute_threshold([])
     assert result.q_hat is None
     assert result.sample_size == 0
     assert result.coverage_lower_bound is None
@@ -167,7 +215,9 @@ def test_empty_records_returns_no_threshold():
 
 
 def test_insufficient_samples_returns_no_threshold():
-    result = calibrator(min_sample_size=500).compute_threshold([record(0.1, 0.0)] * 50)
+    result = make_calibrator(min_sample_size=500).compute_threshold(
+        [record(0.1, 0.0)] * 50
+    )
     assert result.q_hat is None
     assert result.sample_size == 50
     assert result.coverage_lower_bound is None
@@ -178,7 +228,7 @@ def test_insufficient_samples_returns_no_threshold():
 
 def test_all_successful_outcomes_unrestrict_q_hat():
     scores = [0.05, 0.2, 0.4, 0.6, 0.85]
-    result = calibrator(target_alpha=0.05, min_sample_size=5).compute_threshold(
+    result = make_calibrator(target_alpha=0.05, min_sample_size=5).compute_threshold(
         [record(score, 0.0) for score in scores]
     )
     assert result.q_hat == pytest.approx(max(scores))
@@ -189,7 +239,7 @@ def test_all_successful_outcomes_unrestrict_q_hat():
 
 def test_all_failures_returns_no_valid_threshold():
     scores = [0.05, 0.2, 0.4, 0.6, 0.9]
-    result = calibrator(target_alpha=0.05, min_sample_size=5).compute_threshold(
+    result = make_calibrator(target_alpha=0.05, min_sample_size=5).compute_threshold(
         [record(score, 1.0) for score in scores]
     )
     assert result.q_hat is None
@@ -210,7 +260,7 @@ def _small_records():
 
 
 def test_empirical_risk_and_q_hat_calculation():
-    result = calibrator(target_alpha=0.5, min_sample_size=5).compute_threshold(
+    result = make_calibrator(target_alpha=0.5, min_sample_size=5).compute_threshold(
         _small_records()
     )
     # Sorted prefixes: (0.05,0) (0.2,1) (0.4,0) (0.6,0) (0.9,1)
@@ -224,13 +274,13 @@ def test_empirical_risk_and_q_hat_calculation():
 
 def test_no_prefix_leaves_worst_case_assumption():
     # alpha tight enough that only the strictest prefix fits.
-    result = calibrator(target_alpha=0.2, min_sample_size=5).compute_threshold(
+    result = make_calibrator(target_alpha=0.2, min_sample_size=5).compute_threshold(
         _small_records()
     )
     assert result.q_hat == pytest.approx(0.05)
     assert result.achieved_empirical_risk == pytest.approx(0.0)
     assert result.coverage_lower_bound == pytest.approx(
-        calibrator()._wilson_interval_lower(1.0, 1), abs=1e-6
+        make_calibrator()._wilson_interval_lower(1.0, 1), abs=1e-6
     )
 
 
@@ -262,20 +312,22 @@ def test_wilson_interval_lower_zero_samples():
 
 
 def test_exploratory_and_non_independent_records_are_excluded():
-    all_inclusive = calibrator(
+    all_inclusive = make_calibrator(
         target_alpha=0.05, min_sample_size=100
     ).compute_threshold([record(s, 0.0) for s in (0.05, 0.06)] * 500)
     assert all_inclusive.q_hat is not None
 
     mixed = [record(0.05, 0.0, exploratory=(index % 2 == 0)) for index in range(1000)]
-    reduced = calibrator(target_alpha=0.05, min_sample_size=100).compute_threshold(
+    reduced = make_calibrator(target_alpha=0.05, min_sample_size=100).compute_threshold(
         mixed
     )
     assert reduced.sample_size == 500  # half excluded
 
 
 def test_calibrate_by_context_partitions_independently():
-    results = calibrator(target_alpha=0.05, min_sample_size=100).calibrate_by_context(
+    results = make_calibrator(
+        target_alpha=0.05, min_sample_size=100
+    ).calibrate_by_context(
         [
             CalibrationRecord(ctx, score, 1.0 if score > 0.1 else 0.0)
             for ctx, score in [(b"a" * 16, 0.05), (b"a" * 16, 0.06), (b"b" * 16, 0.35)]
@@ -288,8 +340,8 @@ def test_calibrate_by_context_partitions_independently():
 
 
 def test_monotonicity_with_stricter_alpha():
-    loose = calibrator(target_alpha=0.10, min_sample_size=100)
-    strict = calibrator(target_alpha=0.01, min_sample_size=100)
+    loose = make_calibrator(target_alpha=0.10, min_sample_size=100)
+    strict = make_calibrator(target_alpha=0.01, min_sample_size=100)
     records = [record(s, 1.0 if s > 0.1 else 0.0) for s in _synthetic_scores(2000)]
     loose_result = loose.compute_threshold(records)
     strict_result = strict.compute_threshold(records)
@@ -310,7 +362,7 @@ def _synthetic_scores(n: int) -> list[float]:
 
 
 def test_computes_threshold_within_risk_budget():
-    result = calibrator(target_alpha=0.05, min_sample_size=100).compute_threshold(
+    result = make_calibrator(target_alpha=0.05, min_sample_size=100).compute_threshold(
         [record(s, 1.0 if s > 0.1 else 0.0) for s in _synthetic_scores(1000)]
     )
     assert result.q_hat is not None
@@ -335,9 +387,9 @@ def test_calibrate_context_requires_database():
 
 def test_calibrate_context_rejects_invalid_hash(db):
     with pytest.raises(ValueError):
-        calibrator(db, min_sample_size=1).calibrate_context(b"too short")
+        make_calibrator(db, min_sample_size=1).calibrate_context(b"too short")
     with pytest.raises(ValueError):
-        calibrator(db, min_sample_size=1).detect_drift(b"too short")
+        make_calibrator(db, min_sample_size=1).detect_drift(b"too short")
 
 
 def test_calibrate_context_computes_q_hat_from_sqlite(db):
@@ -350,7 +402,7 @@ def test_calibrate_context_computes_q_hat_from_sqlite(db):
     ]
     seed_context(db, pairs)
 
-    c = calibrator(db, target_alpha=0.5, min_sample_size=5)
+    c = make_calibrator(db, target_alpha=0.5, min_sample_size=5)
     result = c.calibrate_context(CTX)
 
     assert result.sample_size == 5
@@ -373,7 +425,7 @@ def test_calibrate_context_matches_pure_path(db):
     ]
     seed_context(db, pairs)
 
-    c = calibrator(db, target_alpha=0.5, min_sample_size=5)
+    c = make_calibrator(db, target_alpha=0.5, min_sample_size=5)
     from_db = c.calibrate_context(CTX)
     offline = c.compute_threshold(
         [record(score, 1.0 if value < 0.5 else 0.0) for (_, score, value, _) in pairs]
@@ -388,9 +440,9 @@ def test_calibrate_context_excludes_explore_shadow(db):
         pairs.append((f"d-{index}", 0.3, 1.0, action))
     seed_context(db, pairs)
 
-    result = calibrator(db, target_alpha=0.4, min_sample_size=100).calibrate_context(
-        CTX
-    )
+    result = make_calibrator(
+        db, target_alpha=0.4, min_sample_size=100
+    ).calibrate_context(CTX)
     assert result.sample_size == 500  # exploratory half excluded
 
 
@@ -406,9 +458,9 @@ def test_calibrate_context_excludes_non_independent_outcomes(db):
         source="task_metric",
     )
 
-    result = calibrator(db, target_alpha=0.4, min_sample_size=100).calibrate_context(
-        CTX
-    )
+    result = make_calibrator(
+        db, target_alpha=0.4, min_sample_size=100
+    ).calibrate_context(CTX)
     assert result.sample_size == 100  # only the independent (task_metric) records
 
 
@@ -425,7 +477,9 @@ def test_calibrate_context_includes_decision_with_mixed_outcomes(db):
         ],
     )
 
-    result = calibrator(db, target_alpha=0.4, min_sample_size=1).calibrate_context(CTX)
+    result = make_calibrator(db, target_alpha=0.4, min_sample_size=1).calibrate_context(
+        CTX
+    )
     assert result.sample_size == 1  # an independent outcome exists
 
 
@@ -434,7 +488,9 @@ def test_calibrate_context_all_success_q_hat_is_max_score(db):
         db,
         [("d-1", 0.5, 1.0, "DELEGATE"), ("d-2", 0.9, 1.0, "DELEGATE")],
     )
-    result = calibrator(db, target_alpha=0.05, min_sample_size=2).calibrate_context(CTX)
+    result = make_calibrator(
+        db, target_alpha=0.05, min_sample_size=2
+    ).calibrate_context(CTX)
     assert result.q_hat == pytest.approx(0.9)
 
 
@@ -443,31 +499,35 @@ def test_calibrate_context_no_valid_threshold(db):
         db,
         [("d-1", 0.5, 0.0, "DELEGATE"), ("d-2", 0.9, 0.0, "DELEGATE")],
     )
-    result = calibrator(db, target_alpha=0.05, min_sample_size=2).calibrate_context(CTX)
+    result = make_calibrator(
+        db, target_alpha=0.05, min_sample_size=2
+    ).calibrate_context(CTX)
     assert result.q_hat is None
     assert result.achieved_empirical_risk == pytest.approx(1.0)
 
 
 def test_calibrate_context_insufficient_data(db):
     seed_context(db, [("d-1", 0.3, 1.0, "DELEGATE")])
-    result = calibrator(db, target_alpha=0.05, min_sample_size=100).calibrate_context(
-        CTX
-    )
+    result = make_calibrator(
+        db, target_alpha=0.05, min_sample_size=100
+    ).calibrate_context(CTX)
     assert result.q_hat is None
     assert result.sample_size == 1
 
 
 def test_calibrate_context_empty_context_returns_empty_result(db):
-    result = calibrator(db, target_alpha=0.05, min_sample_size=1).calibrate_context(
-        OTHER_CTX
-    )
+    result = make_calibrator(
+        db, target_alpha=0.05, min_sample_size=1
+    ).calibrate_context(OTHER_CTX)
     assert result.q_hat is None
     assert result.sample_size == 0
 
 
 def test_calibrate_context_is_scoped_to_context(db):
     seed_context(db, [("d-1", 0.3, 1.0, "DELEGATE")], context=OTHER_CTX)
-    result = calibrator(db, target_alpha=0.4, min_sample_size=1).calibrate_context(CTX)
+    result = make_calibrator(db, target_alpha=0.4, min_sample_size=1).calibrate_context(
+        CTX
+    )
     assert result.sample_size == 0
 
 
@@ -493,7 +553,7 @@ def test_detect_drift_flags_wide_divergence(db):
         ],
     )
 
-    report = calibrator(db).detect_drift(CTX)
+    report = make_calibrator(db).detect_drift(CTX)
     assert report["drift_detected"] is True
     assert report["full_range_accuracy"] == pytest.approx(0.5)
     assert report["active_range_accuracy"] == pytest.approx(1.0)
@@ -508,7 +568,7 @@ def test_detect_drift_quiet_when_ranges_agree(db):
     ]
     seed_joined_only(db, rows)
 
-    report = calibrator(db).detect_drift(CTX)
+    report = make_calibrator(db).detect_drift(CTX)
     assert report["drift_detected"] is False
     assert report["full_range_accuracy"] == pytest.approx(1.0)
     assert report["active_range_accuracy"] == pytest.approx(1.0)
@@ -516,7 +576,7 @@ def test_detect_drift_quiet_when_ranges_agree(db):
 
 
 def test_detect_drift_empty_context_reports_zeroes(db):
-    report = calibrator(db).detect_drift(OTHER_CTX)
+    report = make_calibrator(db).detect_drift(OTHER_CTX)
     assert report == {
         "drift_detected": False,
         "full_range_accuracy": 0.0,
@@ -533,7 +593,192 @@ def test_detect_drift_missing_range_counts_as_zero_accuracy(db):
             for i in range(20)
         ],
     )
-    report = calibrator(db).detect_drift(CTX)
+    report = make_calibrator(db).detect_drift(CTX)
     assert report["full_range_accuracy"] == 0.0  # no exploration records
     assert report["active_range_accuracy"] == 1.0
     assert report["drift_detected"] is True
+
+
+# --------------------------------------------------------------------------- #
+# Acceptance scenarios (user-spec Tests 1-7)
+# --------------------------------------------------------------------------- #
+
+
+def test_acceptance_1_perfect_classifier_sets_permissive_threshold():
+    c = make_calibrator(target_alpha=0.05, min_sample_size=100)
+    scores = [0.05 + 0.009 * index for index in range(100)]
+    result = c.compute_threshold([record(score, 0.0) for score in scores])
+
+    assert result.sample_size == 100
+    # All-correct data accepts every score, so the threshold is the most
+    # permissive one available: the largest non-conformity score observed.
+    assert result.q_hat == pytest.approx(max(scores))
+    assert result.q_hat > 0.5
+    assert result.achieved_empirical_risk == pytest.approx(0.0)
+    assert result.coverage_lower_bound is not None
+
+
+def test_acceptance_2_imperfect_classifier_threshold_within_budget():
+    # 85% correct at low score (high confidence), 15% wrong once the score
+    # climbs into [0.10, 0.30]: the safe threshold must land in that band.
+    correct = [record(0.05, 0.0) for _ in range(850)]
+    wrong = [record(0.10 + 0.20 * (index / 149), 1.0) for index in range(150)]
+    result = make_calibrator(target_alpha=0.05, min_sample_size=100).compute_threshold(
+        [*correct, *wrong]
+    )
+
+    assert result.sample_size == 1000
+    assert result.q_hat is not None
+    assert 0.1 <= result.q_hat <= 0.3
+    assert result.achieved_empirical_risk is not None
+    assert result.achieved_empirical_risk <= 0.05
+    assert result.min_observed_loss == 0.0
+    assert result.max_observed_loss == 1.0
+
+
+def test_acceptance_3_all_wrong_has_no_safe_threshold():
+    c = make_calibrator(target_alpha=0.05, min_sample_size=100)
+    result = c.compute_threshold(
+        [record(0.05 + 0.005 * index, 1.0) for index in range(100)]
+    )
+
+    assert result.sample_size == 100
+    assert result.q_hat is None  # not even the tightest threshold is safe
+    assert result.achieved_empirical_risk == pytest.approx(1.0)
+    assert result.min_observed_loss == 1.0
+    assert result.max_observed_loss == 1.0
+
+
+def test_acceptance_4_insufficient_data_returns_no_threshold():
+    c = make_calibrator(target_alpha=0.05, min_sample_size=100)
+    result = c.compute_threshold([record(0.3, 0.0) for _ in range(50)])
+
+    assert result.sample_size == 50
+    assert result.q_hat is None
+    assert result.achieved_empirical_risk is None
+    assert result.coverage_lower_bound is None
+    assert result.min_observed_loss == 0.0
+    assert result.max_observed_loss == 0.0
+
+
+def test_acceptance_5_drift_detected_when_divergence_exceeds_budget(calibrator):
+    exploratory = [
+        joined_row(
+            f"exp-{index}",
+            score=0.05 + 0.02 * (index % 5),
+            outcome_value=1.0,
+            action="EXPLORE_SHADOW",
+        )
+        for index in range(50)
+    ]
+    delegated = [
+        joined_row(f"del-{index}", score=0.01, outcome_value=0.0, action="DELEGATE")
+        for index in range(50)
+    ]
+    seed_joined_only(calibrator.database, exploratory + delegated)
+
+    report = calibrator.detect_drift(CTX)
+    assert report["drift_detected"] is True
+    assert report["full_range_accuracy"] == pytest.approx(1.0)
+    assert report["active_range_accuracy"] == pytest.approx(0.0)
+    assert report["divergence"] == pytest.approx(1.0)  # >> 5% budget
+
+    # Control: the delegated tail matches the full-range accuracy -> no drift.
+    calibrator.database.execute_write("DELETE FROM joined_records")
+    aligned = exploratory + [
+        joined_row(
+            f"del2-{index}",
+            score=0.05 + 0.02 * (index % 5),
+            outcome_value=1.0,
+            action="DELEGATE",
+        )
+        for index in range(50)
+    ]
+    seed_joined_only(calibrator.database, aligned)
+    quiet = calibrator.detect_drift(CTX)
+    assert quiet["drift_detected"] is False
+    assert quiet["full_range_accuracy"] == pytest.approx(1.0)
+    assert quiet["active_range_accuracy"] == pytest.approx(1.0)
+    assert quiet["divergence"] == pytest.approx(0.0)
+
+
+def test_acceptance_6_wilson_interval_tightens_and_is_statistically_correct():
+    c = make_calibrator()
+    p = 0.95
+    sample_sizes = (100, 500, 1000, 5000)
+    bounds = [c.wilson_lower_bound(p, n) for n in sample_sizes]
+
+    # The bound must tighten (rise toward the point estimate) with sample size.
+    assert bounds == sorted(bounds)
+    assert all(0.0 <= bound <= p for bound in bounds)
+    # It converges to the point estimate at scale.
+    assert bounds[-1] == pytest.approx(p, abs=0.01)
+
+    # Independent textbook Wilson implementation must agree exactly.
+    def reference_lower_bound(point: float, n: int) -> float:
+        z = 1.96
+        denominator = 1.0 + z * z / n
+        center = point + z * z / (2.0 * n)
+        margin = z * math.sqrt((point * (1.0 - point) + z * z / (4.0 * n)) / n)
+        return max(0.0, (center - margin) / denominator)
+
+    for bound, n in zip(bounds, sample_sizes):
+        assert bound == pytest.approx(reference_lower_bound(p, n), abs=1e-9)
+
+
+def test_acceptance_7_policy_generated_from_multi_context_calibration(tmp_path):
+    generator = PolicyGenerator(str(tmp_path / "policies"), min_sample_size_default=50)
+    c = make_calibrator(target_alpha=0.05, min_sample_size=50)
+    records = [CalibrationRecord(CTX, 0.05, 0.0) for _ in range(80)]
+    records += [
+        CalibrationRecord(
+            OTHER_CTX,
+            0.10 + 0.01 * (index % 40),
+            1.0 if index % 10 == 0 else 0.0,
+        )
+        for index in range(80)
+    ]
+    results = c.calibrate_by_context(records)
+    assert set(results) == {CTX, OTHER_CTX}
+
+    policy_file = generator.generate_policy(results)
+
+    artifact = load_policy(policy_file)
+    assert artifact["schema_version"] == "1.0"
+    assert artifact["policy_version"]
+    assert artifact["generated_at"].endswith("Z")
+    assert artifact["global"]["min_sample_size_default"] == 50
+    assert validate_policy(artifact) is True
+
+    contexts = {entry["context_ref"]: entry for entry in artifact["contexts"]}
+    assert set(contexts) == {CTX.hex(), OTHER_CTX.hex()}
+    entry = contexts[CTX.hex()]
+    assert entry["state"] == "ACTIVE"
+    assert entry["q_hat"] == pytest.approx(0.05)
+    assert entry["sample_size"] == 80
+    assert entry["min_sample_size"] == 50
+
+
+def test_sample_fixtures_calibrate_a_realistic_context(
+    db, sample_decisions, sample_outcomes
+):
+    db.batch_insert("decisions", sample_decisions)
+    for decision, outcome in zip(sample_decisions, sample_outcomes):
+        db.batch_insert(
+            "joined_records",
+            [
+                joined_row(
+                    decision["decision_id"],
+                    score=decision["non_conformity"],
+                    outcome_value=outcome["outcome_value"],
+                    action=decision["action_taken"],
+                )
+            ],
+        )
+    db.batch_insert("outcomes", sample_outcomes)
+
+    result = make_calibrator(
+        db, target_alpha=0.3, min_sample_size=10
+    ).calibrate_context(CTX)
+    assert result.sample_size == 10  # every sample decision carries an outcome
+    assert result.q_hat is not None
