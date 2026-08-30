@@ -122,12 +122,8 @@ def test_high_frequency_evaluation_logs_every_decision():
 
     # No data loss: the buffer holds exactly one record per evaluation.
     assert buffer.size() == n, f"expected {n} records buffered, got {buffer.size()}"
-    assert (
-        buffer.total_pushed == n
-    ), f"pushed {buffer.total_pushed} records for {n} evaluations"
-    assert (
-        buffer.dropped_count == 0
-    ), f"{buffer.dropped_count} decisions lost before any overload"
+    assert buffer.total_pushed == n, f"pushed {buffer.total_pushed} records for {n} evaluations"
+    assert buffer.dropped_count == 0, f"{buffer.dropped_count} decisions lost before any overload"
 
     records = buffer.pop_batch(max_records=n + 1)
     assert len(records) == n, f"drained {len(records)} records, expected all {n}"
@@ -143,9 +139,7 @@ def test_high_frequency_evaluation_logs_every_decision():
     p50 = float(np.percentile(latencies_us, 50))
     p99 = float(np.percentile(latencies_us, 99))
     mean_us = float(np.mean(latencies_us))
-    print(
-        f"\n  high-freq (n={n}): p50={p50:.1f}us p99={p99:.1f}us mean={mean_us:.1f}us"
-    )
+    print(f"\n  high-freq (n={n}): p50={p50:.1f}us p99={p99:.1f}us mean={mean_us:.1f}us")
     assert p99 < 1000.0, f"p99 latency {p99:.1f}us exceeded the 1ms budget"
 
 
@@ -182,9 +176,7 @@ def test_concurrent_policy_reload_without_crash_or_data_loss():
             )
             for ctx in keys
         }
-        variants.append(
-            policy_from_results(results, version_id=1, min_sample_size=100).contexts
-        )
+        variants.append(policy_from_results(results, version_id=1, min_sample_size=100).contexts)
 
     stop = threading.Event()
     errors: List[BaseException] = []
@@ -237,14 +229,10 @@ def test_concurrent_policy_reload_without_crash_or_data_loss():
     assert not thread_rl.is_alive(), "reloader thread hung"
     assert (
         reloads[0] >= 30
-    ), (  # ~50 expected over 5s at 100ms cadence
-        f"only {reloads[0]} policy reloads in {WINDOW_S}s"
-    )
+    ), f"only {reloads[0]} policy reloads in {WINDOW_S}s"  # ~50 expected over 5s at 100ms cadence
 
     expected = evaluated[0]
-    assert (
-        expected == EVAL_TARGET
-    ), f"evaluator completed {expected}/{EVAL_TARGET} decisions"
+    assert expected == EVAL_TARGET, f"evaluator completed {expected}/{EVAL_TARGET} decisions"
     # No data loss under reload stress: counting agrees on both sides.
     assert (
         buffer.total_pushed == expected
@@ -252,13 +240,9 @@ def test_concurrent_policy_reload_without_crash_or_data_loss():
     assert (
         buffer.dropped_count == 0
     ), f"{buffer.dropped_count} decisions dropped during reload stress"
-    assert (
-        buffer.size() == expected
-    ), f"buffered {buffer.size()} != evaluated {expected}"
+    assert buffer.size() == expected, f"buffered {buffer.size()} != evaluated {expected}"
     records = buffer.pop_batch(max_records=expected + 1)
-    assert (
-        len(records) == expected
-    ), f"drained {len(records)} records, expected all {expected}"
+    assert len(records) == expected, f"drained {len(records)} records, expected all {expected}"
 
 
 # --- Test 3: exploration coverage -------------------------------------------
@@ -293,8 +277,7 @@ def test_exploration_coverage_within_one_percent():
     ), f"explored {explored}/5000, expected ~100 (98-102, got {explored})"
     metrics = gk.get_metrics()
     assert metrics["explore"] == explored, (
-        f"metrics.explore={metrics['explore']} disagrees with ring buffer "
-        f"count {explored}"
+        f"metrics.explore={metrics['explore']} disagrees with ring buffer " f"count {explored}"
     )
 
 
@@ -332,9 +315,7 @@ def test_ring_buffer_backpressure_warnings_at_90_percent(caplog):
     warnings = "\n".join(
         r.getMessage() for r in caplog.records if r.name == "decision_ledger.telemetry"
     )
-    assert (
-        "full" in warnings
-    ), f"expected backpressure warnings near 90% fill, logged: {warnings!r}"
+    assert "full" in warnings, f"expected backpressure warnings near 90% fill, logged: {warnings!r}"
 
     # New evaluations still work once the buffer is saturated.
     for _ in range(30):
@@ -377,9 +358,7 @@ def test_benchmark_single_evaluation_latency(benchmark: Any):
 
     benchmark(_evaluate_target, gk, ctx)
     mean_us = benchmark.stats.get("mean") * 1e6
-    assert (
-        mean_us < 1000.0
-    ), f"mean single-evaluation latency {mean_us:.1f}us >= 1ms budget"
+    assert mean_us < 1000.0, f"mean single-evaluation latency {mean_us:.1f}us >= 1ms budget"
 
 
 @pytest.mark.benchmark
@@ -418,6 +397,4 @@ def test_benchmark_batch_pop_latency(benchmark: Any, caplog):
     # 60 pops x 1000 records = 60k drained from the 200k pre-fill.
     benchmark.pedantic(_pop_1000, rounds=60, warmup_rounds=5)
     mean_us = benchmark.stats.get("mean") * 1e6
-    assert (
-        mean_us < 100.0
-    ), f"mean pop_batch(1000) latency {mean_us:.1f}us >= 100us budget"
+    assert mean_us < 100.0, f"mean pop_batch(1000) latency {mean_us:.1f}us >= 100us budget"

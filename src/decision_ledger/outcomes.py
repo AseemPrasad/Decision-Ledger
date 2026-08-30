@@ -32,7 +32,7 @@ import uuid
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional, TypedDict
 
 from .database import Database, DatabaseError
 from .telemetry import DecisionRecord
@@ -41,6 +41,17 @@ from .utils import generate_uuidv7, now_ns
 logger = logging.getLogger(__name__)
 
 _MISSING_DECISION_CHUNK = 500
+
+
+class _OutcomeRow(TypedDict):
+    """Row shape for inserts into the ``outcomes`` table."""
+
+    outcome_id: str
+    decision_id: str
+    timestamp_ns: int
+    outcome_value: float
+    outcome_source: str
+    metadata: Optional[str]
 
 
 class OutcomeSource(Enum):
@@ -94,9 +105,7 @@ def _coerce_outcome_value(value: Any) -> float:
             f"of type {type(value).__name__}"
         )
     if not 0.0 <= number <= 1.0:
-        raise InvalidOutcomeValueError(
-            f"outcome_value must be in [0.0, 1.0], got {value!r}"
-        )
+        raise InvalidOutcomeValueError(f"outcome_value must be in [0.0, 1.0], got {value!r}")
     return number
 
 
@@ -110,8 +119,7 @@ def _coerce_outcome_source(source: Any) -> OutcomeSource:
         except ValueError:
             pass
     raise InvalidOutcomeSourceError(
-        f"outcome_source must be one of {[s.value for s in OutcomeSource]},"
-        f" got {source!r}"
+        f"outcome_source must be one of {[s.value for s in OutcomeSource]}," f" got {source!r}"
     )
 
 
@@ -123,9 +131,7 @@ def _coerce_metadata(metadata: Any) -> Optional[str]:
         try:
             return json.dumps(metadata)
         except (TypeError, ValueError) as exc:
-            raise InvalidMetadataError(
-                f"metadata is not JSON-serializable: {exc}"
-            ) from None
+            raise InvalidMetadataError(f"metadata is not JSON-serializable: {exc}") from None
     if isinstance(metadata, str):
         try:
             json.loads(metadata)
@@ -336,7 +342,7 @@ class OutcomeCollector:
         decision_id: str,
         outcome_value: float,
         outcome_source: OutcomeSource,
-        metadata: str = "",
+        metadata: str | Mapping[str, Any] | None = None,
     ) -> str:
         """Validate and log one outcome for an existing decision.
 
@@ -422,7 +428,7 @@ class OutcomeCollector:
         """
         if not records:
             return []
-        rows: List[Dict[str, Any]] = []
+        rows: List[_OutcomeRow] = []
         for index, record in enumerate(records):
             decision_id = record.get("decision_id")
             if not decision_id:
@@ -432,9 +438,7 @@ class OutcomeCollector:
                     self._build_row(
                         decision_id=decision_id,
                         outcome_value=record.get("outcome_value"),
-                        outcome_source=record.get(
-                            "source", record.get("outcome_source")
-                        ),
+                        outcome_source=record.get("source", record.get("outcome_source")),
                         metadata=record.get("metadata", ""),
                     )
                 )
@@ -448,9 +452,7 @@ class OutcomeCollector:
         missing = self._missing_decision_ids([row["decision_id"] for row in rows])
         if missing:
             shown = ", ".join(repr(item) for item in missing[:5])
-            raise DecisionNotFoundError(
-                f"{len(missing)} decision(s) not found: {shown}"
-            )
+            raise DecisionNotFoundError(f"{len(missing)} decision(s) not found: {shown}")
 
         self._insert_rows(rows)
         outcome_ids = [row["outcome_id"] for row in rows]
@@ -468,9 +470,7 @@ class OutcomeCollector:
             "SELECT 1 FROM decisions WHERE decision_id = ?", (decision_id,)
         )
         if not rows:
-            raise DecisionNotFoundError(
-                f"no decision found for decision_id {decision_id!r}"
-            )
+            raise DecisionNotFoundError(f"no decision found for decision_id {decision_id!r}")
 
     def _missing_decision_ids(self, decision_ids: List[str]) -> List[str]:
         """Return the subset of ``decision_ids`` not present in ``decisions``."""
@@ -478,14 +478,8 @@ class OutcomeCollector:
         for start in range(0, len(decision_ids), _MISSING_DECISION_CHUNK):
             chunk = decision_ids[start : start + _MISSING_DECISION_CHUNK]
             placeholders = ",".join("?" for _ in chunk)
-            query = (
-                f"SELECT decision_id FROM decisions"
-                f" WHERE decision_id IN ({placeholders})"
-            )
-            found = {
-                row["decision_id"]
-                for row in self.database.execute_query(query, tuple(chunk))
-            }
+            query = f"SELECT decision_id FROM decisions" f" WHERE decision_id IN ({placeholders})"
+            found = {row["decision_id"] for row in self.database.execute_query(query, tuple(chunk))}
             missing.extend(item for item in chunk if item not in found)
         return missing
 
@@ -495,7 +489,7 @@ class OutcomeCollector:
         outcome_value: Any,
         outcome_source: Any,
         metadata: Any,
-    ) -> Dict[str, Any]:
+    ) -> _OutcomeRow:
         return {
             "outcome_id": generate_uuidv7(),
             "decision_id": decision_id,
@@ -505,7 +499,7 @@ class OutcomeCollector:
             "metadata": _coerce_metadata(metadata),
         }
 
-    def _insert_rows(self, rows: List[Dict[str, Any]]) -> None:
+    def _insert_rows(self, rows: List[_OutcomeRow]) -> None:
         try:
             inserted = self.database.batch_insert("outcomes", rows)
         except DatabaseError as exc:

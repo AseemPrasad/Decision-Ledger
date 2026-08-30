@@ -245,9 +245,7 @@ def test_batch_chunks_missing_decision_check(db):
 
 def test_batch_with_many_valid_decisions(db):
     decision_ids = [f"d-{index}" for index in range(600)]
-    db.batch_insert(
-        "decisions", [decision_row(decision_id) for decision_id in decision_ids]
-    )
+    db.batch_insert("decisions", [decision_row(decision_id) for decision_id in decision_ids])
     collector = OutcomeCollector(db)
     outcome_ids = collector.log_outcomes_batch(
         [
@@ -290,9 +288,7 @@ def test_in_memory_collector_validates_and_rejects():
     collector = InMemoryOutcomeCollector()
     with pytest.raises(InvalidOutcomeValueError):
         collector.record("d-1", 1.5)
-    record = collector.record(
-        "d-1", outcome_value=0.8, outcome_source=OutcomeSource.TASK_METRIC
-    )
+    record = collector.record("d-1", outcome_value=0.8, outcome_source=OutcomeSource.TASK_METRIC)
     assert record.outcome_source == OutcomeSource.TASK_METRIC
     assert len(list(collector.iter_records())) == 1
 
@@ -347,9 +343,7 @@ def test_joiner_produces_joined_records():
 def test_joiner_loss_for_failed_outcome():
     collector = InMemoryOutcomeCollector()
     collector.record("d-1", outcome_value=0.4)
-    joined = DecisionOutcomeJoiner(collector.iter_records()).join(
-        [_decision_record("d-1")]
-    )
+    joined = DecisionOutcomeJoiner(collector.iter_records()).join([_decision_record("d-1")])
     assert joined[0].loss == 1.0
 
 

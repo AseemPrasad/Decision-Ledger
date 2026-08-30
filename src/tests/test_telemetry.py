@@ -159,9 +159,7 @@ def test_drop_tier_drops_incoming_exploratory():
     assert buffer.push(_record(action=EXPLORATORY)) is False
     assert buffer.dropped_count == before + 1
     assert buffer.size() == 20
-    assert not any(
-        r.action_taken == EXPLORATORY for r in buffer.pop_batch(max_records=100)
-    )
+    assert not any(r.action_taken == EXPLORATORY for r in buffer.pop_batch(max_records=100))
 
 
 def test_drop_tier_evicts_exploratory_before_delegate():

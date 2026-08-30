@@ -11,7 +11,7 @@ and enforces delegation through a fail-closed gatekeeper.
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 from .calibration import (
     CalibrationRecord,
@@ -211,8 +211,7 @@ class DecisionLedger:
         self._require_open()
         if model_confidence is not None and confidence is not None:
             raise ValueError(
-                "evaluate() got both model_confidence and confidence; "
-                "pass exactly one of them"
+                "evaluate() got both model_confidence and confidence; " "pass exactly one of them"
             )
         if model_confidence is None:
             if confidence is None:
@@ -223,9 +222,7 @@ class DecisionLedger:
             model_confidence = confidence
 
         try:
-            action = self.gatekeeper.evaluate(
-                context_hash, model_confidence, decision_type
-            )
+            action = self.gatekeeper.evaluate(context_hash, model_confidence, decision_type)
         except Exception:
             # Any unexpected failure on the hot path fails closed.
             logger.exception(
@@ -250,7 +247,7 @@ class DecisionLedger:
         decision_id: str,
         outcome_value: float,
         outcome_source: str = "human",
-        metadata: str = "",
+        metadata: str | Mapping[str, Any] | None = None,
     ) -> str:
         """Attach an independent outcome to a recorded decision.
 
@@ -285,9 +282,7 @@ class DecisionLedger:
         except Exception:
             logger.exception("log_outcome failed for decision %s", decision_id)
             raise
-        logger.debug(
-            "[Ledger logged outcome %s for decision %s]", outcome_id, decision_id
-        )
+        logger.debug("[Ledger logged outcome %s for decision %s]", outcome_id, decision_id)
         return outcome_id
 
     # ------------------------------------------------------------------ #
@@ -352,12 +347,9 @@ class DecisionLedger:
         self._require_open()
         join_stats = self.database.get_join_statistics()
         action_rows = self.database.execute_query(
-            "SELECT action_taken, COUNT(*) AS count FROM decisions"
-            " GROUP BY action_taken"
+            "SELECT action_taken, COUNT(*) AS count FROM decisions" " GROUP BY action_taken"
         )
-        decisions_by_action = {
-            row["action_taken"]: int(row["count"]) for row in action_rows
-        }
+        decisions_by_action = {row["action_taken"]: int(row["count"]) for row in action_rows}
 
         contexts = self.gatekeeper.policy
         contexts_active = sum(1 for ctx in contexts.values() if ctx.is_active)
@@ -430,16 +422,12 @@ class DecisionLedger:
 
     def _require_open(self) -> None:
         if self._closed:
-            raise RuntimeError(
-                "DecisionLedger is shut down; create a new instance to use it"
-            )
+            raise RuntimeError("DecisionLedger is shut down; create a new instance to use it")
 
     def _write_final_stats(self, stats: Dict[str, Any]) -> None:
         stats_path = self._db_path.with_name(self._db_path.stem + "_stats.json")
         try:
-            stats_path.write_text(
-                json.dumps(stats, indent=2, sort_keys=True), encoding="utf-8"
-            )
+            stats_path.write_text(json.dumps(stats, indent=2, sort_keys=True), encoding="utf-8")
         except Exception:
             logger.exception("could not write final stats to %s", stats_path)
             return

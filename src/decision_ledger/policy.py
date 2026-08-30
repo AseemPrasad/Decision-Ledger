@@ -169,9 +169,7 @@ def validate_policy(data: Any) -> bool:
         cannot accidentally ignore a bad artifact.
     """
     if not isinstance(data, dict):
-        raise PolicyValidationError(
-            f"policy artifact must be a mapping, got {type(data).__name__}"
-        )
+        raise PolicyValidationError(f"policy artifact must be a mapping, got {type(data).__name__}")
 
     schema = data.get("schema_version")
     if schema != POLICY_SCHEMA_VERSION:
@@ -181,9 +179,7 @@ def validate_policy(data: Any) -> bool:
 
     version = data.get("policy_version")
     if not isinstance(version, str) or not re.fullmatch(_POLICY_VERSION_RE, version):
-        raise PolicyValidationError(
-            f"invalid policy_version {version!r}; expected YYYYMMdd-HHMMSS"
-        )
+        raise PolicyValidationError(f"invalid policy_version {version!r}; expected YYYYMMdd-HHMMSS")
 
     generated_at = data.get("generated_at")
     if not isinstance(generated_at, str) or _parse_generated_at(generated_at) is None:
@@ -195,9 +191,7 @@ def validate_policy(data: Any) -> bool:
 
     contexts = data.get("contexts")
     if not isinstance(contexts, list):
-        raise PolicyValidationError(
-            f"contexts must be a list, got {type(contexts).__name__}"
-        )
+        raise PolicyValidationError(f"contexts must be a list, got {type(contexts).__name__}")
     seen: set[str] = set()
     for index, entry in enumerate(contexts):
         _validate_context_entry(entry, index, seen)
@@ -331,8 +325,7 @@ class PolicyGenerator:
         policy_file = self.policies_dir / _policy_filename(policy_version)
         if policy_file.exists() and not force:
             raise PolicyError(
-                f"policy {policy_file} already exists "
-                f"(pass force=True to overwrite it)"
+                f"policy {policy_file} already exists " f"(pass force=True to overwrite it)"
             )
 
         artifact: dict[str, Any] = {
@@ -351,9 +344,7 @@ class PolicyGenerator:
             ],
         }
 
-        policy_file.write_text(
-            yaml.safe_dump(artifact, sort_keys=False), encoding="utf-8"
-        )
+        policy_file.write_text(yaml.safe_dump(artifact, sort_keys=False), encoding="utf-8")
         self._refresh_latest_link(policy_file)
         self.logger.info("[Generated policy: %s]", policy_file)
         return str(policy_file)
@@ -370,9 +361,7 @@ class PolicyGenerator:
         if not self.policies_dir.exists():
             return []
         versions: List[str] = []
-        for path in self.policies_dir.glob(
-            f"{_POLICY_FILENAME_PREFIX}*{_POLICY_EXTENSION}"
-        ):
+        for path in self.policies_dir.glob(f"{_POLICY_FILENAME_PREFIX}*{_POLICY_EXTENSION}"):
             if path.name == _POLICY_LATEST_FILENAME:
                 continue
             if path.is_file():
@@ -392,21 +381,15 @@ class PolicyGenerator:
         self.policies_dir.mkdir(parents=True, exist_ok=True)
         target_file = self.policies_dir / _policy_filename(target_version)
         if not target_file.is_file():
-            raise PolicyError(
-                f"policy version {target_version!r} not found in {self.policies_dir}"
-            )
+            raise PolicyError(f"policy version {target_version!r} not found in {self.policies_dir}")
         load_policy(target_file)  # surface validation errors before republishing
         self._refresh_latest_link(target_file)
         self.logger.info("[Rolled back policy: %s]", target_file)
         return str(target_file)
 
-    def _entry_for(
-        self, context_hash: bytes, result: CalibrationResult
-    ) -> dict[str, Any]:
+    def _entry_for(self, context_hash: bytes, result: CalibrationResult) -> dict[str, Any]:
         if not validate_context_hash(context_hash):
-            raise PolicyValidationError(
-                f"invalid context_hash {context_hash!r}: must be 16 bytes"
-            )
+            raise PolicyValidationError(f"invalid context_hash {context_hash!r}: must be 16 bytes")
         is_revoked = context_hash in self.revoked_contexts
         active = (
             not is_revoked
@@ -461,9 +444,7 @@ def _is_number(value: Any) -> TypeGuard[int | float]:
 
 def _validate_global(global_block: Any) -> None:
     if not isinstance(global_block, dict):
-        raise PolicyValidationError(
-            f"global must be a mapping, got {type(global_block).__name__}"
-        )
+        raise PolicyValidationError(f"global must be a mapping, got {type(global_block).__name__}")
 
     default_alpha = global_block.get("default_alpha")
     if not _is_number(default_alpha) or not 0.0 < default_alpha <= 1.0:
@@ -500,9 +481,7 @@ def _validate_context_entry(entry: Any, index: int, seen: set[str]) -> None:
         raise PolicyValidationError(f"contexts[{index}] must be a mapping")
 
     context_ref = entry.get("context_ref")
-    if not isinstance(context_ref, str) or not re.fullmatch(
-        r"[0-9a-f]{32}", context_ref
-    ):
+    if not isinstance(context_ref, str) or not re.fullmatch(r"[0-9a-f]{32}", context_ref):
         raise PolicyValidationError(
             f"contexts[{index}].context_ref must be 32 hex chars, got {context_ref!r}"
         )
@@ -527,11 +506,7 @@ def _validate_context_entry(entry: Any, index: int, seen: set[str]) -> None:
         raise PolicyValidationError(f"contexts[{index}] is ACTIVE but has no q_hat")
 
     sample_size = entry.get("sample_size")
-    if (
-        isinstance(sample_size, bool)
-        or not isinstance(sample_size, int)
-        or sample_size < 0
-    ):
+    if isinstance(sample_size, bool) or not isinstance(sample_size, int) or sample_size < 0:
         raise PolicyValidationError(
             f"contexts[{index}].sample_size must be an int >= 0, got {sample_size!r}"
         )
@@ -543,6 +518,5 @@ def _validate_context_entry(entry: Any, index: int, seen: set[str]) -> None:
         or min_sample_size < 1
     ):
         raise PolicyValidationError(
-            f"contexts[{index}].min_sample_size must be an int >= 1, "
-            f"got {min_sample_size!r}"
+            f"contexts[{index}].min_sample_size must be an int >= 1, " f"got {min_sample_size!r}"
         )

@@ -56,9 +56,7 @@ DRIFT_DIVERGENCE_THRESHOLD = 0.05
 # verifying its own output would self-confirm, so it can never calibrate the
 # live threshold. Everything else in :class:`OutcomeSource` is independent.
 _INDEPENDENT_OUTCOME_SOURCES: tuple[str, ...] = tuple(
-    source.value
-    for source in OutcomeSource
-    if source is not OutcomeSource.MODEL_VERIFICATION
+    source.value for source in OutcomeSource if source is not OutcomeSource.MODEL_VERIFICATION
 )
 
 
@@ -135,9 +133,7 @@ class ConformalCalibrator:
     # Pure-statistics core
     # ------------------------------------------------------------------ #
 
-    def compute_threshold(
-        self, records: Iterable[CalibrationRecord]
-    ) -> CalibrationResult:
+    def compute_threshold(self, records: Iterable[CalibrationRecord]) -> CalibrationResult:
         """Compute ``q_hat`` for a single context's calibration records.
 
         Only ``is_independent and not is_exploratory`` records count. The
@@ -194,9 +190,7 @@ class ConformalCalibrator:
         return CalibrationResult(
             q_hat=float(sorted_scores[max_valid_idx]),
             sample_size=n,
-            coverage_lower_bound=self._wilson_interval_lower(
-                coverage, max_valid_idx + 1
-            ),
+            coverage_lower_bound=self._wilson_interval_lower(coverage, max_valid_idx + 1),
             achieved_empirical_risk=achieved_risk,
             min_observed_loss=min_loss,
             max_observed_loss=max_loss,
@@ -209,10 +203,7 @@ class ConformalCalibrator:
         grouped: Dict[bytes, List[CalibrationRecord]] = {}
         for record in records:
             grouped.setdefault(record.context_hash, []).append(record)
-        return {
-            ctx_hash: self.compute_threshold(group)
-            for ctx_hash, group in grouped.items()
-        }
+        return {ctx_hash: self.compute_threshold(group) for ctx_hash, group in grouped.items()}
 
     def _wilson_interval_lower(self, p: float, n: int) -> float:
         """Lower bound of the Wilson score interval for coverage ``p``.
@@ -370,14 +361,10 @@ class ConformalCalibrator:
 
     def _require_database(self) -> Database:
         if self.database is None:
-            raise ValueError(
-                "ConformalCalibrator needs a Database to calibrate contexts"
-            )
+            raise ValueError("ConformalCalibrator needs a Database to calibrate contexts")
         return self.database
 
 
 def _require_valid_context_hash(context_hash: bytes) -> None:
     if not validate_context_hash(context_hash):
-        raise ValueError(
-            "context_hash must be exactly 16 bytes (128-bit context reference)"
-        )
+        raise ValueError("context_hash must be exactly 16 bytes (128-bit context reference)")

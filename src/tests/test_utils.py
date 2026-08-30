@@ -147,8 +147,7 @@ def test_setup_logging_file_output(tmp_path):
     lines = log_path.read_text().splitlines()
     assert lines, "no lines written to the log file"
     assert re.search(
-        r"\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}\] \[INFO\] "
-        r"hello decision ledger ctx=abc",
+        r"\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}\] \[INFO\] " r"hello decision ledger ctx=abc",
         lines[-1],
     )
 

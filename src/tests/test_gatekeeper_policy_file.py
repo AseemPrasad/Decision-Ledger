@@ -88,11 +88,7 @@ def test_policy_file_takes_precedence_over_policy_dict(tmp_path: Path) -> None:
 
 
 def test_policy_dict_used_directly() -> None:
-    policy = {
-        CTX_A: CalibrationContext(
-            CTX_A, q_hat=0.05, current_sample_size=500, is_active=True
-        )
-    }
+    policy = {CTX_A: CalibrationContext(CTX_A, q_hat=0.05, current_sample_size=500, is_active=True)}
     gatekeeper = Gatekeeper(policy, exploration_rate=0.0)
     assert gatekeeper.policy is policy
     assert gatekeeper.evaluate(CTX_A, 0.99, "route") == GateAction.DELEGATE
@@ -157,9 +153,7 @@ def test_reload_policy_from_file_swaps_behavior(tmp_path: Path) -> None:
     assert gatekeeper._policy_version == "20260830-020000"
 
 
-def test_reload_policy_from_file_logs_version_transition(
-    tmp_path: Path, caplog
-) -> None:
+def test_reload_policy_from_file_logs_version_transition(tmp_path: Path, caplog) -> None:
     first = _artifact(tmp_path / "first", policy_version="20260830-010000")
     gatekeeper = Gatekeeper(policy_file=str(first), exploration_rate=0.0)
 
@@ -167,15 +161,10 @@ def test_reload_policy_from_file_logs_version_transition(
     with caplog.at_level(logging.INFO, logger="decision_ledger.gatekeeper"):
         gatekeeper.reload_policy_from_file(str(second))
 
-    assert (
-        "[Reloaded policy: 20260830-010000 -> 20260830-020000, contexts=3]"
-        in caplog.text
-    )
+    assert "[Reloaded policy: 20260830-010000 -> 20260830-020000, contexts=3]" in caplog.text
 
 
-def test_reload_policy_from_file_logs_none_when_version_unknown(
-    tmp_path: Path, caplog
-) -> None:
+def test_reload_policy_from_file_logs_none_when_version_unknown(tmp_path: Path, caplog) -> None:
     gatekeeper = Gatekeeper({CTX_A: _result_confident()}, exploration_rate=0.0)
     path = _artifact(tmp_path, policy_version="20260830-030000")
     with caplog.at_level(logging.INFO, logger="decision_ledger.gatekeeper"):
@@ -216,6 +205,4 @@ def test_reload_from_missing_file_raises(tmp_path: Path) -> None:
 
 
 def _result_confident() -> CalibrationContext:
-    return CalibrationContext(
-        CTX_A, q_hat=0.05, current_sample_size=500, is_active=True
-    )
+    return CalibrationContext(CTX_A, q_hat=0.05, current_sample_size=500, is_active=True)

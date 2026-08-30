@@ -31,9 +31,7 @@ def _build_synthetic_stream(seed: int = 42) -> tuple[bytes, RingBuffer]:
         quantization_format="int8",
         temperature=0.2,
     )
-    policy = policy_from_results(
-        {ctx: _placeholder_result()}, version_id=1, min_sample_size=20
-    )
+    policy = policy_from_results({ctx: _placeholder_result()}, version_id=1, min_sample_size=20)
     buffer = RingBuffer(capacity=4096)
     gk = Gatekeeper(policy.contexts, exploration_rate=0.0, telemetry=buffer)
     rng = random.Random(seed)

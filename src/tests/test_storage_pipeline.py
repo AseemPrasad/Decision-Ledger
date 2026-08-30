@@ -129,9 +129,7 @@ def sample_decisions(ring_buffer):
 def test_consumer_flushes_decisions_to_sqlite(consumer, sample_decisions, database):
     # The consumer (flush_interval=0.05s) must drain all 100 records within the
     # 10s window; wait_until fails fast if a flush stalls.
-    assert wait_until(
-        lambda: consumer.get_metrics()["total_records_flushed"] == 100, timeout=10.0
-    )
+    assert wait_until(lambda: consumer.get_metrics()["total_records_flushed"] == 100, timeout=10.0)
 
     rows = database.get_decisions()
     expected = {record.decision_id for record in sample_decisions}
@@ -195,10 +193,7 @@ def test_outcome_logging_and_querying(database):
     assert outcomes[0]["outcome_source"] == "task_metric"
 
     # Query by decision_id through the database layer too.
-    assert (
-        database.get_outcomes(decision_id=decision.decision_id)[0]["outcome_value"]
-        == 0.85
-    )
+    assert database.get_outcomes(decision_id=decision.decision_id)[0]["outcome_value"] == 0.85
 
 
 # --------------------------------------------------------------------------- #
@@ -279,9 +274,7 @@ def test_concurrent_consumer_and_producer(database, ring_buffer):
 def test_consumer_graceful_shutdown(database, ring_buffer):
     # Huge flush window/batch: nothing is flushed until stop() runs its final
     # flush, which must persist everything still buffered.
-    consumer = BatchConsumer(
-        ring_buffer, database, flush_interval=1_000_000.0, batch_size=10**9
-    )
+    consumer = BatchConsumer(ring_buffer, database, flush_interval=1_000_000.0, batch_size=10**9)
     consumer.start()
     try:
         for index in range(1_000):

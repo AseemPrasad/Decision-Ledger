@@ -49,9 +49,7 @@ def _policy(**kwargs) -> dict[bytes, CalibrationContext]:
 def _gatekeeper(**kwargs) -> Gatekeeper:
     exploration_rate = kwargs.pop("exploration_rate", 0.02)
     telemetry = kwargs.pop("telemetry", None)
-    return Gatekeeper(
-        _policy(**kwargs), exploration_rate=exploration_rate, telemetry=telemetry
-    )
+    return Gatekeeper(_policy(**kwargs), exploration_rate=exploration_rate, telemetry=telemetry)
 
 
 # --- Data structures ------------------------------------------------------
@@ -145,9 +143,7 @@ def test_exploration_never_at_zero_rate():
 def test_exploration_is_deterministic_by_call_number():
     gk = _gatekeeper(exploration_rate=0.02)
     actions = [gk.evaluate(CTX, 0.95, "route") for _ in range(60)]
-    explored_at = [
-        i + 1 for i, action in enumerate(actions) if action == GateAction.EXPLORE_SHADOW
-    ]
+    explored_at = [i + 1 for i, action in enumerate(actions) if action == GateAction.EXPLORE_SHADOW]
     assert explored_at == [50]  # every 50th eligible call samples
 
 
@@ -260,9 +256,7 @@ def test_invalid_decision_type_warns_but_proceeds(caplog):
     with caplog.at_level(logging.WARNING, logger="decision_ledger.gatekeeper"):
         action = gk.evaluate(CTX, 0.95, "teleport")
     assert action == GateAction.DELEGATE
-    assert any(
-        "unknown decision_type" in record.getMessage() for record in caplog.records
-    )
+    assert any("unknown decision_type" in record.getMessage() for record in caplog.records)
 
 
 def test_invalid_exploration_rate_rejected():

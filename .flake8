@@ -1,0 +1,6 @@
+[flake8]
+max-line-length = 100
+extend-ignore = E203,W503
+exclude = venv,.git,__pycache__,.mypy_cache,.pytest_cache,.coverage,build,dist
+per-file-ignores =
+    src/examples/*.py:E402

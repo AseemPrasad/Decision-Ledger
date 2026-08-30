@@ -99,9 +99,7 @@ def successful_set(n: int, decision_prefix: str) -> list[tuple[str, float, float
     return [(f"{decision_prefix}-{i}", 0.05, 1.0, "DELEGATE") for i in range(n)]
 
 
-def exploratory_set(
-    n: int, decision_prefix: str
-) -> list[tuple[str, float, float, str]]:
+def exploratory_set(n: int, decision_prefix: str) -> list[tuple[str, float, float, str]]:
     return [(f"{decision_prefix}-e{i}", 0.05, 1.0, "EXPLORE_SHADOW") for i in range(n)]
 
 
@@ -124,13 +122,9 @@ def gatekeeper() -> Gatekeeper:
 
 def test_constructor_validation(db: Database, generator: PolicyGenerator) -> None:
     with pytest.raises(ValueError):
-        CalibrationPipeline(
-            db, Gatekeeper(exploration_rate=0.0), generator, target_alpha=0.0
-        )
+        CalibrationPipeline(db, Gatekeeper(exploration_rate=0.0), generator, target_alpha=0.0)
     with pytest.raises(ValueError):
-        CalibrationPipeline(
-            db, Gatekeeper(exploration_rate=0.0), generator, target_alpha=1.0
-        )
+        CalibrationPipeline(db, Gatekeeper(exploration_rate=0.0), generator, target_alpha=1.0)
 
 
 def test_calibrator_wired_to_generator_settings(

@@ -38,7 +38,7 @@ CONTEXT = make_context_hash("qwen-7b", "routing")
 CONVERGE_TIMEOUT_S = 60
 
 
-def percentile(sorted_times: list, pct: float) -> float:
+def percentile(sorted_times: list[float], pct: float) -> float:
     """Nearest-rank percentile of a pre-sorted sequence of microseconds."""
     if not sorted_times:
         return 0.0
@@ -59,7 +59,7 @@ def main() -> int:
         try:
             print(f"\n=== Serving {TARGET_DECISIONS} decisions ===\n")
 
-            latencies_us: list = []
+            latencies_us: list[float] = []
             start = time.perf_counter()
             for request_number in range(1, TARGET_DECISIONS + 1):
                 t0 = time.perf_counter()
@@ -89,9 +89,7 @@ def main() -> int:
             polls = []
             deadline = time.monotonic() + CONVERGE_TIMEOUT_S
             while time.monotonic() < deadline:
-                on_disk = ledger.database.execute_query(
-                    "SELECT COUNT(*) FROM decisions"
-                )[0][0]
+                on_disk = ledger.database.execute_query("SELECT COUNT(*) FROM decisions")[0][0]
                 polls.append((on_disk, ledger.ring_buffer.size()))
                 if on_disk >= TARGET_DECISIONS:
                     break
@@ -100,29 +98,19 @@ def main() -> int:
             ledger.consumer.drain_now()  # empty the remainder synchronously
 
             for count, ring_size in polls:
-                print(
-                    f"  poll: decisions_on_disk={count:6d} ring_buffer={ring_size:6d}"
-                )
+                print(f"  poll: decisions_on_disk={count:6d} ring_buffer={ring_size:6d}")
 
             metrics = ledger.consumer.get_metrics()
-            print(
-                f"\n  records processed by consumer: {metrics['total_records_processed']}"
-            )
-            print(
-                f"  records flushed to SQLite:     {metrics['total_records_flushed']}"
-            )
-            print(
-                f"  records dropped (should be 0): {metrics['total_records_dropped']}"
-            )
+            print(f"\n  records processed by consumer: {metrics['total_records_processed']}")
+            print(f"  records flushed to SQLite:     {metrics['total_records_flushed']}")
+            print(f"  records dropped (should be 0): {metrics['total_records_dropped']}")
             print(f"  flush count:                   {metrics['total_flushes']}")
             print(f"  avg flush time:                {metrics['avg_flush_time_ms']} ms")
             print(f"  records still buffered:        {metrics['backlog_records']}")
 
             # ----------------------------------------------------------- #
             print("\n=== Durability check ===\n")
-            final = ledger.database.execute_query("SELECT COUNT(*) FROM decisions")[0][
-                0
-            ]
+            final = ledger.database.execute_query("SELECT COUNT(*) FROM decisions")[0][0]
             dropped = ledger.ring_buffer.dropped_count
             print(f"decisions persisted: {final} / {TARGET_DECISIONS}")
             print(f"ring buffer drops:   {dropped}")

@@ -166,9 +166,7 @@ class BatchConsumer(threading.Thread):
             dropped = self._total_dropped
             backlog = len(self._batch)
         if still_alive:
-            logger.warning(
-                "batch consumer still alive after %.0fs join timeout", timeout
-            )
+            logger.warning("batch consumer still alive after %.0fs join timeout", timeout)
         logger.info(
             "batch consumer stopped: total_flushed=%d total_dropped=%d" " backlog=%d",
             flushed,
@@ -217,8 +215,7 @@ class BatchConsumer(threading.Thread):
 
                 now = time.monotonic()
                 should_flush = (
-                    len(self._batch) >= self.batch_size
-                    or (now - last_flush) >= self.flush_interval
+                    len(self._batch) >= self.batch_size or (now - last_flush) >= self.flush_interval
                 )
                 if should_flush and now >= next_attempt:
                     if self._flush_to_db():
@@ -310,8 +307,7 @@ class BatchConsumer(threading.Thread):
                     time.sleep(RETRY_DELAY_S * attempt)
                     continue
                 logger.error(
-                    "SQLite flush failed after %d attempts; buffering %d"
-                    " records in memory",
+                    "SQLite flush failed after %d attempts; buffering %d" " records in memory",
                     FLUSH_RETRY_ATTEMPTS,
                     len(rows),
                 )
@@ -401,9 +397,7 @@ class JsonlExport:
     poll_interval_ms: int = 1
 
     _thread: Optional[threading.Thread] = field(default=None, init=False, repr=False)
-    _stop_event: threading.Event = field(
-        default_factory=threading.Event, init=False, repr=False
-    )
+    _stop_event: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
     @property
     def running(self) -> bool:
@@ -414,9 +408,7 @@ class JsonlExport:
         if self.running:
             return
         self._stop_event.clear()
-        self._thread = threading.Thread(
-            target=self._run, name="ledger-jsonl-consumer", daemon=True
-        )
+        self._thread = threading.Thread(target=self._run, name="ledger-jsonl-consumer", daemon=True)
         self._thread.start()
 
     def stop(self, timeout: float = 5.0) -> None:
@@ -451,8 +443,7 @@ class JsonlExport:
             return
         local = time.localtime()
         relative = (
-            Path("decisions")
-            / f"date={local.tm_year:04d}-{local.tm_mon:02d}-{local.tm_mday:02d}"
+            Path("decisions") / f"date={local.tm_year:04d}-{local.tm_mon:02d}-{local.tm_mday:02d}"
         )
         relative = relative / f"hour={local.tm_hour:02d}"
         path = Path(self.output_dir) / relative / f"batch-{time.time_ns()}.jsonl"

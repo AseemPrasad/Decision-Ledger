@@ -16,7 +16,6 @@ Runs with the rest of the suite: ``pytest tests/test_end_to_end.py``
 marked ``benchmark``.
 """
 
-import statistics
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -51,9 +50,7 @@ def _new_ledger(tmp_path: Path, name: str = "ledger.db", **kwargs) -> DecisionLe
     policies = tmp_path / "policies"
     policies.mkdir(exist_ok=True)
     generator = PolicyGenerator(str(policies))
-    artifact = generator.generate_policy(
-        {}, policy_version="20000101-000000", force=True
-    )
+    artifact = generator.generate_policy({}, policy_version="20000101-000000", force=True)
     kwargs.setdefault("auto_start_consumer", True)
     kwargs.setdefault("exploration_rate", 0.0)
     policy_file = kwargs.pop("policy_file", artifact)
@@ -79,11 +76,7 @@ def _recalibrate(ledger: DecisionLedger, tmp_path: Path) -> str:
 def _evaluate(ledger, ctx, n, confidence=None, decision_type="route") -> None:
     """Evaluate ``n`` decisions against ``ctx`` with a confidence sweep."""
     for i in range(n):
-        conf = (
-            confidence
-            if confidence is not None
-            else 0.60 + (i % 40) / 100.0  # 0.60 .. 0.99
-        )
+        conf = confidence if confidence is not None else 0.60 + (i % 40) / 100.0  # 0.60 .. 0.99
         ledger.evaluate(ctx, confidence=conf, decision_type=decision_type)
 
 
@@ -92,9 +85,7 @@ def _log_outcomes_consistent(ledger, ctx, threshold=0.8) -> int:
     rows = ledger.database.get_decisions(context_hash=ctx)
     for row in rows:
         good = 1.0 if row["model_confidence"] >= threshold else 0.0
-        ledger.log_outcome(
-            row["decision_id"], good, outcome_source="task_metric", metadata=""
-        )
+        ledger.log_outcome(row["decision_id"], good, outcome_source="task_metric", metadata="")
     return len(rows)
 
 
@@ -162,9 +153,7 @@ def test_multi_context_workflow(tmp_path):
             assert len(decisions) == 150
             for row in decisions[:120]:
                 good = 1.0 if row["model_confidence"] >= 0.75 else 0.0
-                ledger.log_outcome(
-                    row["decision_id"], good, outcome_source="task_metric"
-                )
+                ledger.log_outcome(row["decision_id"], good, outcome_source="task_metric")
 
         policy_path = ledger.calibrate()
 
@@ -423,9 +412,7 @@ def test_calibration_100k_records(tmp_path):
 def test_ring_buffer_at_90_percent_capacity(tmp_path):
     """90% fill: backpressure kicks in but the system keeps working."""
     capacity = 20_000
-    ledger = _new_ledger(
-        tmp_path, ring_buffer_capacity=capacity, auto_start_consumer=False
-    )
+    ledger = _new_ledger(tmp_path, ring_buffer_capacity=capacity, auto_start_consumer=False)
     ctx = make_context_hash("qwen-7b", "routing")
     try:
         target = int(capacity * 0.90)

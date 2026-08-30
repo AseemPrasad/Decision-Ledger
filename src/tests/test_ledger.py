@@ -44,9 +44,7 @@ def test_init_consumer_stopped_when_disabled(tmp_path):
 
 def test_init_rejects_bad_exploration_rate(tmp_path):
     with pytest.raises(ValueError):
-        DecisionLedger(
-            tmp_path / "ledger.db", exploration_rate=1.5, auto_start_consumer=False
-        )
+        DecisionLedger(tmp_path / "ledger.db", exploration_rate=1.5, auto_start_consumer=False)
 
 
 # --------------------------------------------------------------------------- #
@@ -58,9 +56,7 @@ def test_evaluate_fails_closed_and_records(tmp_path):
     ledger = DecisionLedger(tmp_path / "ledger.db", auto_start_consumer=False)
     try:
         ctx = make_context_hash("qwen-7b", "routing")
-        assert (
-            ledger.evaluate(ctx, confidence=0.85, decision_type="route") == "ESCALATE"
-        )
+        assert ledger.evaluate(ctx, confidence=0.85, decision_type="route") == "ESCALATE"
         assert ledger.evaluate(ctx, model_confidence=0.2) == "ESCALATE"
         assert ledger.consumer.drain_now() == 2
         assert len(_decision_ids(ledger)) == 2

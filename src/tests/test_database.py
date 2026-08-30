@@ -76,8 +76,7 @@ def test_init_creates_all_tables_and_indexes(db):
     tables = {
         row["name"]
         for row in db.execute_query(
-            "SELECT name FROM sqlite_master WHERE type = 'table'"
-            " AND name NOT LIKE 'sqlite_%'"
+            "SELECT name FROM sqlite_master WHERE type = 'table'" " AND name NOT LIKE 'sqlite_%'"
         )
     }
     assert {"decisions", "outcomes", "joined_records", "policies"} <= tables
@@ -85,8 +84,7 @@ def test_init_creates_all_tables_and_indexes(db):
     indexes = {
         row["name"]
         for row in db.execute_query(
-            "SELECT name FROM sqlite_master WHERE type = 'index'"
-            " AND name NOT LIKE 'sqlite_%'"
+            "SELECT name FROM sqlite_master WHERE type = 'index'" " AND name NOT LIKE 'sqlite_%'"
         )
     }
     assert {
@@ -157,18 +155,10 @@ def test_execute_write_returns_rowcount(db):
         == 1
     )
     assert (
-        db.execute_write(
-            "UPDATE decisions SET latency_us = 9 WHERE decision_id = ?", ("d-1",)
-        )
-        == 1
+        db.execute_write("UPDATE decisions SET latency_us = 9 WHERE decision_id = ?", ("d-1",)) == 1
     )
-    assert (
-        db.execute_write("DELETE FROM decisions WHERE decision_id = ?", ("d-1",)) == 1
-    )
-    assert (
-        db.execute_write("DELETE FROM decisions WHERE decision_id = ?", ("d-missing",))
-        == 0
-    )
+    assert db.execute_write("DELETE FROM decisions WHERE decision_id = ?", ("d-1",)) == 1
+    assert db.execute_write("DELETE FROM decisions WHERE decision_id = ?", ("d-missing",)) == 0
 
 
 def test_batch_insert_counts_and_persists(seed_decisions):
@@ -211,9 +201,7 @@ def test_batch_insert_policies(db):
         ],
     )
     assert count == 1
-    rows = db.execute_query(
-        "SELECT policy_id, is_active FROM policies WHERE is_active = 1"
-    )
+    rows = db.execute_query("SELECT policy_id, is_active FROM policies WHERE is_active = 1")
     assert rows[0]["policy_id"] == "policy_v001"
 
 
@@ -224,9 +212,7 @@ def test_batch_insert_policies(db):
 
 def test_foreign_keys_enforced(seed_decisions):
     with pytest.raises(DatabaseIntegrityError):
-        seed_decisions.batch_insert(
-            "outcomes", [outcome_row("o-bogus", "no-such-decision")]
-        )
+        seed_decisions.batch_insert("outcomes", [outcome_row("o-bogus", "no-such-decision")])
 
 
 def test_valid_outcome_insert_roundtrips(seed_decisions):

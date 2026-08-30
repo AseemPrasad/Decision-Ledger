@@ -63,9 +63,7 @@ def test_consumer_drains_to_sqlite(ledger_db):
     consumer.start()
 
     try:
-        assert wait_until(
-            lambda: consumer.get_metrics()["total_records_flushed"] == 500
-        )
+        assert wait_until(lambda: consumer.get_metrics()["total_records_flushed"] == 500)
     finally:
         consumer.stop()
 
@@ -108,9 +106,7 @@ def test_interval_triggers_flush(ledger_db):
 
 def test_stop_performs_final_flush(ledger_db):
     buffer = RingBuffer()
-    consumer = BatchConsumer(
-        buffer, ledger_db, flush_interval=3600.0, batch_size=10_000
-    )
+    consumer = BatchConsumer(buffer, ledger_db, flush_interval=3600.0, batch_size=10_000)
     push_records(buffer, 7)
     consumer.start()
 
@@ -159,9 +155,7 @@ def test_flush_errors_retried_then_success(ledger_db):
     push_records(buffer, 5)
     consumer.start()
     try:
-        assert wait_until(
-            lambda: consumer.get_metrics()["total_records_processed"] == 5
-        )
+        assert wait_until(lambda: consumer.get_metrics()["total_records_processed"] == 5)
     finally:
         consumer.stop()
 
@@ -179,9 +173,7 @@ def test_database_down_buffers_and_drops_at_cap(ledger_db, caplog):
     consumer.start()
     try:
         push_records(buffer, 2600)
-        assert wait_until(
-            lambda: consumer.get_metrics()["total_records_dropped"] >= 1600
-        )
+        assert wait_until(lambda: consumer.get_metrics()["total_records_dropped"] >= 1600)
     finally:
         consumer.stop()
 
@@ -222,9 +214,7 @@ def test_metrics_are_accurate(ledger_db):
     push_records(buffer, 250)
     consumer.start()
     try:
-        assert wait_until(
-            lambda: consumer.get_metrics()["total_records_flushed"] == 250
-        )
+        assert wait_until(lambda: consumer.get_metrics()["total_records_flushed"] == 250)
     finally:
         consumer.stop()
 
@@ -275,9 +265,7 @@ def test_jsonl_export_flushes_all_pending_records(tmp_path):
 
     exporter.start()
     try:
-        assert wait_until(
-            lambda: len(list((tmp_path / "out" / "decisions").rglob("*.jsonl"))) >= 1
-        )
+        assert wait_until(lambda: len(list((tmp_path / "out" / "decisions").rglob("*.jsonl"))) >= 1)
     finally:
         exporter.stop()
 

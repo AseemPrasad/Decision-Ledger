@@ -33,7 +33,6 @@ Design notes
 from __future__ import annotations
 
 import logging
-import math
 import threading
 import time
 from dataclasses import dataclass, field
@@ -195,31 +194,23 @@ class Gatekeeper:
                 # Unknown context: fail closed.
                 self._escalate += 1
                 escalated[code] += 1
-                return self._record(
-                    context_hash, confidence, code, GateAction.ESCALATE, start_ns
-                )
+                return self._record(context_hash, confidence, code, GateAction.ESCALATE, start_ns)
 
             if not context.is_active:
                 self._escalate += 1
                 escalated[code] += 1
-                return self._record(
-                    context_hash, confidence, code, GateAction.ESCALATE, start_ns
-                )
+                return self._record(context_hash, confidence, code, GateAction.ESCALATE, start_ns)
 
             if context.current_sample_size < context.min_sample_size:
                 # Insufficient statistical power: fail closed.
                 self._escalate += 1
                 escalated[code] += 1
-                return self._record(
-                    context_hash, confidence, code, GateAction.ESCALATE, start_ns
-                )
+                return self._record(context_hash, confidence, code, GateAction.ESCALATE, start_ns)
 
             if context.q_hat is None:
                 self._escalate += 1
                 escalated[code] += 1
-                return self._record(
-                    context_hash, confidence, code, GateAction.ESCALATE, start_ns
-                )
+                return self._record(context_hash, confidence, code, GateAction.ESCALATE, start_ns)
 
             if self._should_explore():
                 self._explore += 1
@@ -230,15 +221,11 @@ class Gatekeeper:
             non_conformity = 1.0 - confidence
             if non_conformity <= context.q_hat:
                 self._delegate += 1
-                return self._record(
-                    context_hash, confidence, code, GateAction.DELEGATE, start_ns
-                )
+                return self._record(context_hash, confidence, code, GateAction.DELEGATE, start_ns)
 
             self._escalate += 1
             escalated[code] += 1
-            return self._record(
-                context_hash, confidence, code, GateAction.ESCALATE, start_ns
-            )
+            return self._record(context_hash, confidence, code, GateAction.ESCALATE, start_ns)
 
     def _should_explore(self) -> bool:
         """Deterministic stratified exploration by call number.
@@ -266,9 +253,7 @@ class Gatekeeper:
             self.policy = new_policy
 
     @classmethod
-    def from_policy_file(
-        cls, policy_file: str, exploration_rate: float = 0.02
-    ) -> Gatekeeper:
+    def from_policy_file(cls, policy_file: str, exploration_rate: float = 0.02) -> Gatekeeper:
         """Create a gatekeeper from a schema-1.0 policy artifact YAML file.
 
         Args:
@@ -341,7 +326,6 @@ class Gatekeeper:
     def get_metrics(self) -> Dict[str, Any]:
         """Snapshot of evaluation counts and rates per decision type."""
         with self._lock:
-            total = self._calls
             escalate = self._escalate
             delegate = self._delegate
             explore = self._explore
@@ -360,9 +344,7 @@ class Gatekeeper:
                 _DECISION_NAMES[code]: {
                     "calls": calls[code],
                     "escalations": escalated[code],
-                    "escalation_rate": (
-                        escalated[code] / calls[code] if calls[code] else 0.0
-                    ),
+                    "escalation_rate": (escalated[code] / calls[code] if calls[code] else 0.0),
                 }
                 for code in _DECISION_NAMES
             },

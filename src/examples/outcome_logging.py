@@ -26,6 +26,7 @@ import sys
 import tempfile
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 # Make `src/` importable when the script is run directly (not installed).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -43,7 +44,7 @@ CTX_HASHES = [CTX_ROUTE, CTX_JUDGE]
 NUM_DECISIONS = 8
 
 
-def seed_decisions(ledger: DecisionLedger, rng: random.Random) -> list:
+def seed_decisions(ledger: DecisionLedger, rng: random.Random) -> list[dict[str, str]]:
     """Serve a handful of decisions and return their durable decision ids."""
     for _ in range(NUM_DECISIONS):
         ctx_hash = CTX_HASHES[_ % len(CTX_HASHES)]
@@ -63,7 +64,7 @@ def seed_decisions(ledger: DecisionLedger, rng: random.Random) -> list:
     ]
 
 
-def show_row(label: str, row: dict) -> None:
+def show_row(label: str, row: Any) -> None:
     """Print one outcome/joined row compactly."""
     print(f"  {label:<36} {json.dumps(row, default=str)}")
 
@@ -110,8 +111,7 @@ def main() -> int:
                 )
                 outcome_ids.append(outcome_id)
                 print(
-                    f"  logged outcome for decision[{index}] via {source:<20} "
-                    f"-> {outcome_id}"
+                    f"  logged outcome for decision[{index}] via {source:<20} " f"-> {outcome_id}"
                 )
 
             # ----------------------------------------------------------- #
@@ -152,9 +152,7 @@ def main() -> int:
             )
             show_row(
                 "get_outcomes_for_decision(0)",
-                ledger.outcome_collector.get_outcomes_for_decision(
-                    decisions[0]["decision_id"]
-                ),
+                ledger.outcome_collector.get_outcomes_for_decision(decisions[0]["decision_id"]),
             )
             all_outcomes = ledger.database.get_outcomes()
             print(f"\n  database.get_outcomes() -> {len(all_outcomes)} rows, e.g.:")
@@ -201,8 +199,7 @@ def main() -> int:
             saved_levels = {
                 name: logging.getLogger(name).getEffectiveLevel()
                 for name in logging.root.manager.loggerDict
-                if name == "decision_ledger"
-                or name.startswith("decision_ledger.")
+                if name == "decision_ledger" or name.startswith("decision_ledger.")
             }
             for name in saved_levels:
                 logging.getLogger(name).setLevel(logging.CRITICAL)

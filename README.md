@@ -20,17 +20,69 @@ P(Loss(Decision, GroundTruth) > 0) <= alpha
 finite-sample, no distributional assumptions, computed over exchangeable
 calibration data.
 
-## Feature overview
+## Final feature set
 
-| Area          | What it does                                                          |
-| ------------- | --------------------------------------------------------------------- |
-| Gatekeeper    | Hot-path `evaluate()` -> `delegate` / `escalate` / `explore_shadow`    |
-| Fail-closed   | Unknown context or insufficient data always escalates                 |
-| Telemetry     | Every evaluation captured in a bounded ring buffer                    |
-| Outcomes      | Independent results linked back to decisions by `decision_id`         |
-| Calibration   | Split Conformal Risk Control -> per-context `q_hat` + Wilson bound    |
-| Policy        | Versioned YAML artifacts, atomic reload, context-hash invalidation    |
-| Exploration   | Epsilon shadow sampling removes selection bias (no user risk)         |
+| Area          | What it does                                                              |
+| ------------- | ------------------------------------------------------------------------- |
+| Gatekeeper    | Hot-path `evaluate()` -> `DELEGATE` / `ESCALATE` / `EXPLORE_SHADOW`        |
+| Fail-closed   | Unknown context or insufficient data always escalates                     |
+| Telemetry     | Every evaluation captured in a bounded, lossy-if-overrun ring buffer      |
+| Storage       | Background `BatchConsumer` flushes to durable SQLite (WAL) + optional JSONL|
+| Outcomes      | Independent labels (human / task_metric / user_report) linked by `decision_id` |
+| Calibration   | Split Conformal Risk Control: per-context `q_hat` + Wilson lower bound     |
+| Drift         | `detect_drift()` compares active-vs-full-range accuracy post-recalibration|
+| Policy        | Versioned schema-1.0 YAML artifacts, atomic writes, reload, rollback      |
+| Exploration   | Epsilon shadow sampling removes selection bias (no user risk)             |
+| Orchestrator  | `DecisionLedger` façade wires evaluate -> store -> outcomes -> calibrate -> reload |
+| Ops           | `stats()`, final-stats snapshot on `shutdown()`, 100k-record CLI, runbook  |
+
+## Performance (measured)
+
+| Metric                           | Value                                  |
+| -------------------------------- | -------------------------------------- |
+| `evaluate()` p50                  | ~8 µs (budget 1 ms)                    |
+| `evaluate()` p99                  | ~20 µs                                 |
+| Sequential throughput             | ~109,000 evals/s per process           |
+| Concurrent (8 workers, 1000 evals)| ~90,000 evals/s, **0 dropped**         |
+| Calibration, 100k joined records  | ~1.3 s (~76,000 records/s, 100 contexts)|
+
+Measured on a dev workstation with the end-to-end suite; reproduce with
+`python src/examples/stress_test.py` and `pytest tests/test_end_to_end.py -m "benchmark or slow" -s`.
+
+## Quick start (3 minutes)
+
+```bash
+# 1. Install
+python -m venv venv
+venv\Scripts\activate              # Windows   (source venv/bin/activate on macOS/Linux)
+pip install -r requirements.txt    # runtime + dev tools
+pip install -e .                   # makes `decision_ledger` importable
+
+# 2. Smoke test
+python src/examples/basic_serving.py      # delegation enforcement, 1000 requests
+```
+
+That's a working ledger in two commands. To build one from scratch:
+
+```python
+import tempfile
+from decision_ledger import DecisionLedger, make_context_hash
+
+with tempfile.TemporaryDirectory() as tmp:
+    ledger = DecisionLedger(f"{tmp}/ledger.db", auto_start_consumer=False)
+    ctx = make_context_hash("qwen-7b", "routing")     # 16-byte context id
+    print(ledger.evaluate(ctx, confidence=0.95, decision_type="route"))
+    # 'ESCALATE'  -- empty policy: fail-closed until calibrated
+    ledger.shutdown()
+```
+
+Full flows — calibrate, serve, log outcomes, reload, keep trust in check:
+
+```bash
+python src/examples/calibration_demo.py    # learn -> serve -> learn again
+python src/examples/outcome_logging.py     # outcomes -> join -> match rate
+python src/examples/stress_test.py         # 10k decisions, durability check
+```
 
 ## Architecture
 
@@ -52,64 +104,6 @@ calibration data.
                        └─▶ Gatekeeper.reload_policy()  (~atomic swap)
 ```
 
-## Quick start
-
-```bash
-python -m venv venv
-venv\Scripts\activate            # Windows   (source venv/bin/activate on macOS/Linux)
-pip install -r requirements.txt  # runtime + dev tools
-pip install -e .                 # imports the decision_ledger package
-pytest                           # run the test suite
-```
-
-## 5-minute tutorial
-
-The full flow, in five steps:
-
-```python
-from decision_ledger import (
-    GateAction, Gatekeeper, RingBuffer, context_hash, policy_from_results,
-)
-from decision_ledger.calibration import CalibrationRecord, ConformalCalibrator
-
-# 1. Your serving context — changing any input creates a NEW context.
-ctx = context_hash(
-    "route",
-    prompt_template="SELECT * FROM {table} LIMIT {n};",
-    model_id="qwen-2.5-coder-7b-instruct",
-    temperature=0.2,
-)
-
-# 2. Calibrate with labeled decisions (independent, non-exploratory).
-records = [CalibrationRecord(ctx, 0.05, 0.0), CalibrationRecord(ctx, 0.45, 1.0), ...]
-result = ConformalCalibrator(target_alpha=0.05, min_sample_size=500)\
-    .compute_threshold(records)
-policy = policy_from_results({ctx: result}, version_id=1)
-
-# 3. Enforce: delegate only when S = 1 - confidence <= q_hat.
-gk = Gatekeeper(policy.contexts, exploration_rate=0.02, telemetry=RingBuffer())
-action = gk.evaluate(ctx, 0.95, "route")
-#   GateAction.DELEGATE      -> use the small model
-#   GateAction.ESCALATE      -> use the frontier model (fail-closed)
-#   GateAction.EXPLORE_SHADOW-> run both, serve frontier, log counterfactual
-
-# 4. Outcomes arrive later; link and re-calibrate (see outcome_logging.py).
-
-# 5. Publish the new policy and reload.
-from decision_ledger.policy import load_policy, policy_from_dict, save_policy
-save_policy(policy, "policies/policy-v1.yaml")
-artifact = load_policy("policies/policy-v1.yaml")
-gk.reload_policy(policy_from_dict(artifact).contexts)
-```
-
-Run the ready-made demos:
-
-```bash
-python src/examples/basic_serving.py      # delegation enforcement
-python src/examples/calibration_demo.py   # conformal calibration + policy YAML
-python src/examples/outcome_logging.py    # outcomes -> join -> match rate
-```
-
 ## Project layout
 
 ```
@@ -120,53 +114,124 @@ decision_ledger/
 │   │   ├── telemetry.py        # ring buffer + decision records
 │   │   ├── consumer.py         # batch drain: SQLite consumer + JSONL export
 │   │   ├── database.py         # SQLite persistence (decisions/outcomes/joins)
-│   │   ├── outcomes.py         # outcome collection + joining
-│   │   ├── calibration.py      # Split Conformal Risk Control
+│   │   ├── outcomes.py         # outcome collection + joining + CLI
+│   │   ├── calibration.py      # Split Conformal Risk Control + drift
 │   │   ├── policy.py           # versioned policy artifacts (YAML)
-│   │   └── utils.py            # context hashing, UUIDv7 ids
-│   ├── tests/                  # pytest suite
+│   │   ├── pipeline.py         # calibrate -> publish -> hot reload
+│   │   └── __init__.py         # DecisionLedger orchestrator
+│   ├── tests/                  # unit + integration suite
 │   ├── examples/               # runnable demos
-│   └── docs/                   # DESIGN.md, API.md, RUNBOOK.md, EXAMPLES.md
-├── pyproject.toml              # metadata + black/mypy/pytest config
+│   └── docs/                   # design, API, runbook, benchmarks, style
+├── tests/test_end_to_end.py    # integration + performance + stress suite
+├── docs/RUNBOOK.md             # operations runbook
+├── pyproject.toml              # metadata + black/isort/flake8/mypy/pytest config
 ├── requirements.txt
-└── setup.py                    # legacy shim
+├── setup.py                    # legacy shim (metadata lives in pyproject)
+├── LICENSE                     # MIT
+└── CHANGELOG.md
+```
+
+## Tutorial
+
+The full control loop in five steps:
+
+```python
+from decision_ledger import (
+    CalibrationRecord, ConformalCalibrator, DecisionLedger,
+    Gatekeeper, PolicyGenerator, make_context_hash, policy_from_results,
+)
+
+# 1. Your serving context -- changing any factor creates a NEW context.
+ctx = make_context_hash("qwen-7b", "routing", prompt_template_version="v3")
+
+# 2. Calibrate with labeled decisions (independent, non-exploratory).
+records = [CalibrationRecord(ctx, 0.05, 0.0), CalibrationRecord(ctx, 0.45, 1.0)]
+result = ConformalCalibrator(target_alpha=0.05, min_sample_size=500)\
+    .compute_threshold(records)
+serving = policy_from_results({ctx: result}, version_id=1)
+# Below min_sample_size the context stays INACTIVE and escalates
+# (fail-closed); delegate only once enough exchangeable labels exist.
+
+# 3. Enforce: delegate only when S = 1 - confidence <= q_hat.
+gk = Gatekeeper(serving.contexts, exploration_rate=0.02)
+action = gk.evaluate(ctx, 0.95, "route")
+#   GateAction.DELEGATE        -> use the small model
+#   GateAction.ESCALATE        -> use the frontier model (fail-closed)
+#   GateAction.EXPLORE_SHADOW  -> run both, serve frontier, log counterfactual
+
+# 4. Or use the orchestrator, which also persists and reloads automatically.
+ledger = DecisionLedger("ledger.db", auto_start_consumer=False)
+ledger.evaluate(ctx, confidence=0.95, decision_type="route")
+ledger.consumer.drain_now()          # make the decision durable
+decision_id = ledger.database.execute_query(
+    "SELECT decision_id FROM decisions LIMIT 1"
+)[0]["decision_id"]
+ledger.log_outcome(decision_id, 1.0, outcome_source="human")
+ledger.calibrate()                   # drain, join, recalibrate, publish, reload
+stats = ledger.stats()               # operational snapshot
+ledger.shutdown()
+
+# 5. Publish a policy artifact and hot-swap the gate.
+artifact_path = PolicyGenerator("policies").generate_policy(
+    {ctx: result}, policy_version="20260830-100000"
+)
+gk.reload_policy_from_file(artifact_path)   # atomic swap
 ```
 
 ## Docs
 
-- [Architecture (Week 1)](src/docs/ARCHITECTURE_WEEK1.md) — gatekeeper + ring buffer, latency budget, thread safety, exploration
-- [Quickstart](src/docs/QUICKSTART.md) — 5-minute setup with runnable examples
-- [Gatekeeper API](src/docs/API_GATEKEEPER.md) — full reference + common mistakes
-- [Telemetry API](src/docs/API_TELEMETRY.md) — ring buffer + decision records, performance
-- [Design](src/docs/DESIGN.md) — problem, guarantees, architecture, trade-offs
-- [API](src/docs/API.md) — full reference
-- [Runbook](src/docs/RUNBOOK.md) — operations, monitoring, failure modes
-- [Examples](src/docs/EXAMPLES.md) — end-to-end patterns
-- [Benchmarks](src/docs/BENCHMARKS.md) — measured budgets and methodology
-- [Code Style](src/docs/CODE_STYLE.md) — formatting, typing, docstrings, logging
+| Doc                                                                 | What's in it                                        |
+| -------------------------------------------------------------------- | --------------------------------------------------- |
+| [API Reference](src/docs/API_REFERENCE.md)                            | Verified, runnable reference for the whole package  |
+| [Runbook](docs/RUNBOOK.md)                                            | Deployment, monitoring, troubleshooting, incidents  |
+| [Design](src/docs/DESIGN.md)                                          | Problem, guarantees, architecture, trade-offs       |
+| [Architecture (Week 1)](src/docs/ARCHITECTURE_WEEK1.md)               | Gatekeeper + ring buffer, latency, exploration      |
+| [Quickstart](src/docs/QUICKSTART.md)                                  | 5-minute setup with runnable examples               |
+| [API](src/docs/API.md)                                                | Full reference                                      |
+| [Gatekeeper API](src/docs/API_GATEKEEPER.md)                          | Reference + common mistakes                         |
+| [Telemetry API](src/docs/API_TELEMETRY.md)                            | Ring buffer + records, performance                  |
+| [Examples](src/docs/EXAMPLES.md)                                      | End-to-end patterns                                 |
+| [Benchmarks](src/docs/BENCHMARKS.md)                                  | Measured budgets and methodology                    |
+| [Code Style](src/docs/CODE_STYLE.md)                                  | Formatting, typing, docstrings, logging             |
+| [License](LICENSE), [Changelog](CHANGELOG.md)                         | —                                                  |
 
 ## Development
 
 ```bash
-black .                                    # format
-mypy src/                                  # typecheck the package
-pytest                                     # fast test run (incl. benchmarks)
-coverage run --branch -m pytest -k "not benchmark"   # measure coverage
-coverage report -m -i                      # view report
+black src tests examples        # format (line length 100)
+isort src tests examples        # sort imports
+flake8 src tests                # lint (see .flake8)
+mypy                            # strict typecheck, package
+mypy src/examples src/setup.py  # strict typecheck, examples
+pytest                          # run the full suite (incl. benches)
+coverage erase
+coverage run --branch -m pytest -k "not benchmark"    # measure coverage
+coverage report -m -i                                  # view report
 ```
 
-> Note: use `coverage run` directly rather than `pytest --cov=<module>` on
-> Python 3.14 — Coverage's `--source` rebinding can double-import numpy's C
-> extension (`cannot load module more than once per process`).
+Status: **black + isort + flake8 clean; mypy --strict clean (no `type: ignore`);**
+**308 tests pass; >= 96% line coverage.**
+
+> **mypy scope.** The test suite is deliberately outside mypy's strict scope
+> (`packages = ["decision_ledger"]`); it is verified at runtime by pytest.
+> This keeps the type-check gate tight on shipped code (package + examples).
 >
-> Benchmark tests (single-eval < 1ms, `pop_batch(1000)` < 100µs) run under
-> plain `pytest`; they are skipped for coverage runs via `-k "not benchmark"`
-> because Coverage's per-line tracing adds overhead to sub-microsecond hot
-> paths. See [Benchmarks](src/docs/BENCHMARKS.md) for the measured numbers.
+> **Coverage method.** Use `coverage run` rather than `pytest --cov=<module>`
+> on Python 3.14 — Coverage's `--source` rebinding can double-import numpy's
+> C extension (`cannot load module more than once per process`). Benchmark
+> tests (single-eval < 1 ms) are skipped for coverage via `-k "not benchmark"`
+> because per-line tracing inflates sub-microsecond hot paths.
 >
-> `pyproject.toml` pins tool configs for black, mypy, and pytest; add
-> `[tool.coverage.run]` there if you want coverage settings versioned.
+> **Intentional coverage gaps** (defensive code left deliberately untested):
+> - fail-closed `except Exception` handlers on `evaluate()` / `calibrate()`
+>   and the final-drain / stats-write failures in `shutdown()`,
+> - missing-dependency fallbacks (`no blake3`, `no uuid6`), exercised only
+>   when a dependency is absent,
+> - consumer lifecycle edges (`stop()` before start, threads alive past the
+>   join timeout, in-memory cap drop branch),
+> - database maintenance helpers (`backup`, checkpoint, retention) partial
+>   branches, and the outcomes CLI's argument-validation edge cases.
 
 ### License
 
-MIT.
+MIT — see [LICENSE](LICENSE).

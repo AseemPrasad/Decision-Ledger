@@ -44,7 +44,7 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, TypeVar
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -371,9 +371,7 @@ class Database:
     # Queries
     # ------------------------------------------------------------------ #
 
-    def execute_query(
-        self, query: str, params: tuple[Any, ...] = ()
-    ) -> List[sqlite3.Row]:
+    def execute_query(self, query: str, params: tuple[Any, ...] = ()) -> List[sqlite3.Row]:
         """Execute a SELECT and return the matching rows.
 
         Rows are :class:`sqlite3.Row` objects: they support both tuple-style
@@ -439,7 +437,7 @@ class Database:
             logger.error("database write failed: %s", exc)
             raise DatabaseError(f"{exc} (query: {query})") from exc
 
-    def batch_insert(self, table: str, records: List[dict[str, Any]]) -> int:
+    def batch_insert(self, table: str, records: Sequence[Mapping[str, Any]]) -> int:
         """Insert many records into one table with a single prepared statement.
 
         The whole batch runs inside one transaction, so it is atomic: either
@@ -550,9 +548,7 @@ class Database:
             ``None``) and ``outcome_source`` is TEXT.
         """
         if decision_id is None:
-            rows = self.execute_query(
-                "SELECT * FROM outcomes ORDER BY timestamp_ns ASC"
-            )
+            rows = self.execute_query("SELECT * FROM outcomes ORDER BY timestamp_ns ASC")
         else:
             rows = self.execute_query(
                 "SELECT * FROM outcomes WHERE decision_id = ? ORDER BY timestamp_ns ASC",
@@ -596,9 +592,7 @@ class Database:
         if not include_unmatched:
             clauses.append("outcome_value IS NOT NULL")
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-        query = (
-            "SELECT * FROM joined_records" f"{where} ORDER BY decision_timestamp_ns ASC"
-        )
+        query = "SELECT * FROM joined_records" f"{where} ORDER BY decision_timestamp_ns ASC"
         rows = self.execute_query(query, tuple(params))
         return [dict(row) for row in rows]
 

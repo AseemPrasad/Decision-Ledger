@@ -98,10 +98,12 @@ def build_policy(policies_dir: Path) -> str:
     print("\n=== Step 1: synthesize a calibrated policy (offline) ===\n")
     print(f"{'context':<20} {'q_hat':<8} {'samples':<8}  delegates when confident>=")
     for ctx_hash, result in results.items():
+        q_hat = result.q_hat
+        assert q_hat is not None, "synthetic results must carry a threshold"
         print(
             f"{ctx_hash.hex()[:16] + '...':<20} "
-            f"{result.q_hat:<8.2f} {result.sample_size:<8}  "
-            f"{1.0 - result.q_hat:.2f}"
+            f"{q_hat:<8.2f} {result.sample_size:<8}  "
+            f"{1.0 - q_hat:.2f}"
         )
 
     policy_file = generator.generate_policy(results)
@@ -109,11 +111,11 @@ def build_policy(policies_dir: Path) -> str:
     return policy_file
 
 
-def serve(ledger: DecisionLedger, rng: random.Random) -> Counter:
+def serve(ledger: DecisionLedger, rng: random.Random) -> Counter[str]:
     """Serve ``TOTAL_REQUESTS`` requests and report live stats every 100."""
     print(f"\n=== Step 2: serve {TOTAL_REQUESTS} requests " "(stats every 100) ===\n")
 
-    actions: Counter = Counter()
+    actions: Counter[str] = Counter()
     for request_number in range(1, TOTAL_REQUESTS + 1):
         # Simulate one request: pick a context and a model confidence.
         ctx_hash = rng.choice(CTX_HASHES)
@@ -161,10 +163,7 @@ def main() -> int:
             print(f"database:      {workspace_path / 'ledger.db'}")
             print(f"policy fields: {len(ledger.gatekeeper.policy)} contexts")
             for ctx_hash, cfg in ledger.gatekeeper.policy.items():
-                print(
-                    f"  {ctx_hash.hex()[:16]}... q_hat={cfg.q_hat}"
-                    f" active={cfg.is_active}"
-                )
+                print(f"  {ctx_hash.hex()[:16]}... q_hat={cfg.q_hat}" f" active={cfg.is_active}")
 
             # Step 3: serve requests.
             actions = serve(ledger, random.Random(1234))
@@ -174,9 +173,7 @@ def main() -> int:
             stats = ledger.stats()
             print(f"total decisions on disk: {stats['total_decisions']}")
             print(f"decisions by action:     {dict(stats['decisions_by_action'])}")
-            print(
-                f"consumer flushed:        {stats['consumer']['total_records_flushed']}"
-            )
+            print(f"consumer flushed:        {stats['consumer']['total_records_flushed']}")
             print(f"dropped records:         {stats['dropped_records']}")
             print("\nactions observed this run:")
             for action, count in sorted(actions.items()):

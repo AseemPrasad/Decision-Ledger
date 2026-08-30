@@ -81,9 +81,7 @@ def test_generate_policy_writes_schema_1_0_artifact(tmp_path: Path) -> None:
 
     policy_file = Path(path)
     assert policy_file.is_file()
-    assert re.fullmatch(
-        rf"policy_\d{{8}}-\d{{6}}\.yaml", policy_file.name
-    ), policy_file.name
+    assert re.fullmatch(r"policy_\d{8}-\d{6}\.yaml", policy_file.name), policy_file.name
     assert policy_file.parent == tmp_path
 
     artifact = load_policy(policy_file)
@@ -134,9 +132,7 @@ def test_generate_policy_explicit_version_and_force(tmp_path: Path) -> None:
     with pytest.raises(PolicyError, match="already exists"):
         generator.generate_policy(results, policy_version="20260830-120000")
 
-    overwritten = generator.generate_policy(
-        results, policy_version="20260830-120000", force=True
-    )
+    overwritten = generator.generate_policy(results, policy_version="20260830-120000", force=True)
     assert overwritten == first
     assert load_policy(overwritten)["policy_version"] == "20260830-120000"
 
@@ -195,9 +191,7 @@ def test_get_policy_history_nonexistent_dir(tmp_path: Path) -> None:
     assert generator.get_policy_history() == []
 
 
-def test_latest_link_falls_back_when_symlink_disallowed(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_latest_link_falls_back_when_symlink_disallowed(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("decision_ledger.policy.os.symlink", _deny_symlink)
     generator = _generator(tmp_path)
     generator.generate_policy(
@@ -324,9 +318,7 @@ def test_validate_policy_accepts_valid(tmp_path: Path) -> None:
 def test_to_dict_rejects_invalid_policy_version() -> None:
     from decision_ledger.policy import to_dict
 
-    policy = policy_from_results(
-        {CTX_A: _result(q_hat=0.05, sample_size=500)}, version_id=1
-    )
+    policy = policy_from_results({CTX_A: _result(q_hat=0.05, sample_size=500)}, version_id=1)
     with pytest.raises(PolicyValidationError, match="expected YYYYMMdd-HHMMSS"):
         to_dict(policy, policy_version="nope")
 
@@ -388,9 +380,7 @@ def test_serving_policy_is_snapshot_plus_generator_sources_agree(
     generated = _generator(tmp_path).generate_policy(results)
 
     legacy_entries = {c.context_hash.hex(): c for c in legacy.contexts.values()}
-    artifact_entries = {
-        entry["context_ref"]: entry for entry in load_policy(generated)["contexts"]
-    }
+    artifact_entries = {entry["context_ref"]: entry for entry in load_policy(generated)["contexts"]}
     assert legacy_entries[CTX_A.hex()].q_hat == artifact_entries[CTX_A.hex()]["q_hat"]
     assert artifact_entries[CTX_A.hex()]["state"] == ACTIVE
 
@@ -404,9 +394,7 @@ def test_revocation_is_external_and_reversible(tmp_path: Path) -> None:
 
     fresh_generator = _generator(tmp_path, revoked_contexts=frozenset())
     second = load_policy(
-        fresh_generator.generate_policy(
-            results, policy_version="20260830-120000", force=True
-        )
+        fresh_generator.generate_policy(results, policy_version="20260830-120000", force=True)
     )
     assert second["contexts"][0]["state"] == ACTIVE
 

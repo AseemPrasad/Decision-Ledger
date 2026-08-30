@@ -64,17 +64,13 @@ def empty_policy(policies_dir: Path) -> str:
     and a calibration artifact share the same second, so a dynamic version
     would collide inside ``generate_policy``.
     """
-    return PolicyGenerator(str(policies_dir)).generate_policy(
-        {}, policy_version="20200101-000000"
-    )
+    return PolicyGenerator(str(policies_dir)).generate_policy({}, policy_version="20200101-000000")
 
 
-def phase_a(ledger: DecisionLedger, rng: random.Random) -> Counter:
+def phase_a(ledger: DecisionLedger, rng: random.Random) -> Counter[str]:
     """Serve without any trust: every request must escalate."""
-    print(
-        f"\n=== Phase A: {PHASE_A_REQUESTS} requests, empty (fail-closed) policy ===\n"
-    )
-    actions: Counter = Counter()
+    print(f"\n=== Phase A: {PHASE_A_REQUESTS} requests, empty (fail-closed) policy ===\n")
+    actions: Counter[str] = Counter()
     for _ in range(PHASE_A_REQUESTS):
         ctx_hash = CTX_HASHES[_ % len(CTX_HASHES)]
         confidence = rng.random()
@@ -90,9 +86,7 @@ def phase_a(ledger: DecisionLedger, rng: random.Random) -> Counter:
 def log_outcomes(ledger: DecisionLedger, rng: random.Random) -> None:
     """Attach simulated quality labels to every other decision, in bulk."""
     print(f"\n=== Step: log {OUTCOMES_TO_LOG} simulated outcomes (batch) ===\n")
-    rows = ledger.database.execute_query(
-        "SELECT decision_id, model_confidence FROM decisions"
-    )
+    rows = ledger.database.execute_query("SELECT decision_id, model_confidence FROM decisions")
 
     records = []
     for index, row in enumerate(rows):
@@ -157,12 +151,10 @@ def run_calibration(ledger: DecisionLedger) -> str:
     return policy_file
 
 
-def phase_b(ledger: DecisionLedger, rng: random.Random) -> Counter:
+def phase_b(ledger: DecisionLedger, rng: random.Random) -> Counter[str]:
     """Serve again with the freshly calibrated policy in the gate."""
-    print(
-        f"\n=== Phase B: {PHASE_B_REQUESTS} requests with the calibrated policy ===\n"
-    )
-    actions: Counter = Counter()
+    print(f"\n=== Phase B: {PHASE_B_REQUESTS} requests with the calibrated policy ===\n")
+    actions: Counter[str] = Counter()
     for _ in range(PHASE_B_REQUESTS):
         ctx_hash = CTX_HASHES[_ % len(CTX_HASHES)]
         confidence = rng.random()
@@ -173,7 +165,7 @@ def phase_b(ledger: DecisionLedger, rng: random.Random) -> Counter:
     return actions
 
 
-def compare(before: Counter, after: Counter) -> None:
+def compare(before: Counter[str], after: Counter[str]) -> None:
     """Show the control-loop payoff side by side."""
     print("\n=== Before vs after calibration ===\n")
     print(f"{'action':<16} {'before':>10} {'after':>10} {'before %':>9} {'after %':>9}")
@@ -193,9 +185,7 @@ def compare(before: Counter, after: Counter) -> None:
 
 def main() -> int:
     """Run the full learn -> serve -> learn-again loop in a temp workspace."""
-    with tempfile.TemporaryDirectory(
-        prefix="decision_ledger_calibration_"
-    ) as workspace:
+    with tempfile.TemporaryDirectory(prefix="decision_ledger_calibration_") as workspace:
         workspace_path = Path(workspace)
 
         # Empty policy pins the artifact directory to the temp workspace.

@@ -16,18 +16,33 @@ import hashlib
 import logging
 import time
 import uuid
-from typing import Optional
+from typing import Callable, Optional, Protocol
 
 CONTEXT_HASH_SIZE = 16
 
 logger = logging.getLogger(__name__)
 
-try:  # CPython >= 3.13 with BLAKE3 enabled ships hashlib.blake3
-    _blake3_factory = getattr(hashlib, "blake3", None)
-    if _blake3_factory is None:  # fall back to the 'blake3' PyPI package
-        from blake3 import blake3 as _blake3_factory
-except ImportError:  # pragma: no cover - neither backend present
-    _blake3_factory = None
+
+class _Blake3Hasher(Protocol):
+    """The small surface of a BLAKE3 hasher used by :func:`make_context_hash`."""
+
+    def digest(self, size: int = ...) -> bytes: ...
+
+
+def _default_blake3_factory() -> Callable[[bytes], _Blake3Hasher] | None:
+    factory: Callable[[bytes], _Blake3Hasher] | None = None
+    try:  # CPython >= 3.13 with BLAKE3 enabled ships hashlib.blake3
+        candidate = getattr(hashlib, "blake3", None)
+        if candidate is None:  # fall back to the 'blake3' PyPI package
+            from blake3 import blake3 as factory
+        else:
+            factory = candidate
+    except ImportError:  # pragma: no cover - neither backend present
+        factory = None
+    return factory
+
+
+_blake3_factory: Callable[[bytes], _Blake3Hasher] | None = _default_blake3_factory()
 
 
 def now_ns() -> int:
@@ -173,9 +188,7 @@ def context_hash(
         adapter_config_hash,
     ):
         parts.append(b"\x00" if value is None else value.encode("utf-8"))
-    parts.append(
-        b"none" if temperature is None else repr(float(temperature)).encode("utf-8")
-    )
+    parts.append(b"none" if temperature is None else repr(float(temperature)).encode("utf-8"))
 
     digest = hashlib.blake2b(b"\x1f".join(parts), digest_size=CONTEXT_HASH_SIZE)
     return digest.digest()
@@ -191,9 +204,7 @@ def decision_id() -> str:
     return generate_uuidv7()
 
 
-def setup_logging(
-    log_level: str = "INFO", log_file: Optional[str] = None
-) -> logging.Logger:
+def setup_logging(log_level: str = "INFO", log_file: Optional[str] = None) -> logging.Logger:
     """Configure the ``decision_ledger`` logger and return it.
 
     Console output goes to stderr via a ``StreamHandler``; when ``log_file``
@@ -261,15 +272,11 @@ def validate_confidence(confidence: float) -> float:
         TypeError: if ``confidence`` is not a real number.
     """
     if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
-        raise TypeError(
-            f"confidence must be a real number, got {type(confidence).__name__}"
-        )
+        raise TypeError(f"confidence must be a real number, got {type(confidence).__name__}")
     value = float(confidence)
     if not 0.0 <= value <= 1.0:
         clamped = min(1.0, max(0.0, value))
-        logger.warning(
-            "confidence %r out of [0, 1]; clamped to %.4f", confidence, clamped
-        )
+        logger.warning("confidence %r out of [0, 1]; clamped to %.4f", confidence, clamped)
         return clamped
     return value
 
@@ -295,10 +302,7 @@ def validate_context_hash(context_hash: bytes) -> bool:
     Returns:
         bool: whether the value is a valid 16-byte context hash.
     """
-    return (
-        isinstance(context_hash, (bytes, bytearray))
-        and len(context_hash) == CONTEXT_HASH_SIZE
-    )
+    return isinstance(context_hash, (bytes, bytearray)) and len(context_hash) == CONTEXT_HASH_SIZE
 
 
 def hex_hash(data: bytes) -> str:
