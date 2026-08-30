@@ -4,9 +4,31 @@ All notable changes to Decision Ledger are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0rc1] - 2026-08-30
 
-- Nothing yet.
+Distribution + public-release preparation.
+
+### Added
+
+- **Packaging** (`src/setup.py` + `MANIFEST.in`): complete package metadata
+  (name, version, author, MIT license, Long description from `README.md`,
+  Python 3.8+ classifiers, project URLs), runtime dependencies (numpy, PyYAML,
+  blake3, uuid6) and `[dev]` / `[test]` extras (pytest, pytest-cov and friends).
+- **Version management** (`decision_ledger/__version__.py`): single source of
+  truth (`"1.0.0rc1"`); both `pyproject.toml`-free `setup.py` metadata and
+  `decision_ledger.__version__` read from it instead of hardcoding. (PEP 440
+  requires a real pre-release label, so the "1.0.0-mvp" release ships as
+  `1.0.0rc1`.)
+- **CLI entry point**: `decision-ledger-outcome` console script wrapping
+  `decision_ledger.outcomes:main` (same interface as
+  `python -m decision_ledger.outcomes`).
+- **`pyproject.toml`** trimmed to build-system + tool configs (black, isort,
+  flake8, mypy, pytest); metadata no longer duplicated, so `pip install .`,
+  `python setup.py` and `python -m build` all agree.
+- **`Makefile`** (optional, GNU make): `install`, `test`, `cov`, `format`,
+  `lint`, `typecheck`, `check`, `sdist`, `clean` targets.
+- Python classifiers now advertise 3.8+ (`from __future__ import annotations`
+  is present in every package module); 3.9-3.14 remain the tested floor.
 
 ## [0.1.0] - 2026-08-30
 

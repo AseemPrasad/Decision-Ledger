@@ -39,7 +39,7 @@ from the repo root, where `pyproject.toml` puts `src` on `PYTHONPATH`):
 
 ```bash
 pip install -e .
-python -c "import decision_ledger; print(decision_ledger.__version__)"   # 0.1.0
+python -c "import decision_ledger; print(decision_ledger.__version__)"   # 1.0.0rc1
 ```
 
 Everything in this document imports from the top-level package:

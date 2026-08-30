@@ -2,6 +2,7 @@ PyYAML>=6.0
 numpy>=1.24.0
 blake3>=1.0.0
 uuid6>=2024.0.0
+build>=1.0.0
 pytest>=7.0.0
 pytest-cov>=4.0.0
 pytest-benchmark>=4.0.0

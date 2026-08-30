@@ -8,11 +8,14 @@ outcomes, computes confidence thresholds with Split Conformal Risk Control,
 and enforces delegation through a fail-closed gatekeeper.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
+from .__version__ import __version__
 from .calibration import (
     CalibrationRecord,
     CalibrationResult,
@@ -71,8 +74,6 @@ from .utils import (
 )
 
 logger = logging.getLogger(__name__)
-
-__version__ = "0.1.0"
 
 
 class DecisionLedger:

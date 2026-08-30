@@ -55,8 +55,7 @@ Measured on a dev workstation with the end-to-end suite; reproduce with
 # 1. Install
 python -m venv venv
 venv\Scripts\activate              # Windows   (source venv/bin/activate on macOS/Linux)
-pip install -r requirements.txt    # runtime + dev tools
-pip install -e .                   # makes `decision_ledger` importable
+pip install -e ".[dev]"            # editable package + dev/test tools
 
 # 2. Smoke test
 python src/examples/basic_serving.py      # delegation enforcement, 1000 requests

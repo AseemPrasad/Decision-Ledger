@@ -1,0 +1,13 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+include pyproject.toml
+include requirements.txt
+include Makefile
+include .flake8
+include src/decision_ledger/py.typed
+recursive-include src/docs *.md
+include docs/RUNBOOK.md
+recursive-include src/examples *.py
+recursive-include src/tests *.py
+include tests/test_end_to_end.py
