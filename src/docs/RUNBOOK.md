@@ -2,6 +2,10 @@
 
 Operational procedures for the Decision Ledger MVP.
 
+> The comprehensive production runbook (deployment, monitoring, incidents,
+> maintenance, scaling) lives at [`../../docs/RUNBOOK.md`](../../docs/RUNBOOK.md).
+> This file is the lightweight MVP cheat-sheet.
+
 ## Setup
 
 ```bash
