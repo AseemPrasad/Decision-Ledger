@@ -242,3 +242,27 @@ def test_context_manager_flushes_and_closes(tmp_path):
     assert not ledger.consumer.is_alive()
     with pytest.raises(RuntimeError):
         ledger.evaluate(make_context_hash("a", "b"), confidence=0.7)
+
+
+def test_background_consumer_shutdown_closes_db_cross_thread(tmp_path):
+    """A running consumer opens its own SQLite connection on its thread; the
+    main thread must still be able to close() it at shutdown without a
+    ProgrammingError (check_same_thread regression)."""
+    import time
+
+    ledger = DecisionLedger(tmp_path / "ledger.db", auto_start_consumer=True)
+    ctx = make_context_hash("qwen-7b", "routing")
+    for _ in range(50):
+        ledger.evaluate(ctx, confidence=0.5)
+
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        flushed = ledger.consumer.get_metrics()["total_records_flushed"]
+        if flushed >= 50:
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError("consumer never flushed the 50 records")
+
+    final = ledger.shutdown()  # must not raise ProgrammingError
+    assert final["total_decisions"] == 50

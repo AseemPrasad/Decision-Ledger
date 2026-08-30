@@ -255,7 +255,15 @@ class Database:
 
     def _open_new(self) -> sqlite3.Connection:
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(self._db_path), timeout=_CONNECT_TIMEOUT_S)
+        # check_same_thread=False lets `close()` run from any thread. Each
+        # thread still gets its own connection (`_local.conn`); SQLite's
+        # busy_timeout + autocommit mediate concurrent writers, and the
+        # consumer thread is always joined before close() is called.
+        conn = sqlite3.connect(
+            str(self._db_path),
+            timeout=_CONNECT_TIMEOUT_S,
+            check_same_thread=False,
+        )
         conn.row_factory = sqlite3.Row
         conn.isolation_level = None  # autocommit: every write is durable
         conn.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MS}")
