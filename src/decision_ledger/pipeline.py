@@ -38,6 +38,14 @@ class CalibrationPipeline:
         policy_generator: PolicyGenerator,
         target_alpha: float = 0.05,
     ) -> None:
+        """Wire a database, gatekeeper and policy generator into a pipeline.
+
+        Args:
+            database: Ledger store holding decisions, outcomes and joins.
+            gatekeeper: Gatekeeper that receives the reloaded policy.
+            policy_generator: Generates and persists versioned policy artifacts.
+            target_alpha: Per-context risk budget in (0.0, 1.0).
+        """
         if not 0.0 < target_alpha < 1.0:
             raise ValueError("target_alpha must be within (0.0, 1.0)")
         self.database = database

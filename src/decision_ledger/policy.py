@@ -271,6 +271,17 @@ class PolicyGenerator:
         revoked_contexts: FrozenSet[bytes] = frozenset(),
         logger: Optional[logging.Logger] = None,
     ) -> None:
+        """Create a policy generator that writes schema-1.0 YAML artifacts.
+
+        Args:
+            policies_dir: Directory where versioned artifacts are stored.
+            default_alpha: Per-context risk budget carried into artifacts.
+            fail_closed: Whether unknown contexts start as ``ESCALATE``.
+            exploration_rate: Stratified shadow-sampling rate.
+            min_sample_size_default: Minimum samples before a context activates.
+            revoked_contexts: Contexts that are never served (``REVOKED``).
+            logger: Optional logger override.
+        """
         if not 0.0 < default_alpha <= 1.0:
             raise PolicyValidationError(
                 f"default_alpha must be within (0.0, 1.0], got {default_alpha!r}"
@@ -388,6 +399,7 @@ class PolicyGenerator:
         return str(target_file)
 
     def _entry_for(self, context_hash: bytes, result: CalibrationResult) -> dict[str, Any]:
+        """Build the schema-1.0 context entry for one calibration result."""
         if not validate_context_hash(context_hash):
             raise PolicyValidationError(f"invalid context_hash {context_hash!r}: must be 16 bytes")
         is_revoked = context_hash in self.revoked_contexts
@@ -426,10 +438,12 @@ class PolicyGenerator:
 
 
 def _policy_filename(policy_version: str) -> str:
+    """Return the artifact filename for a ``YYYYMMDD-HHMMSS`` version."""
     return f"{_POLICY_FILENAME_PREFIX}{policy_version}{_POLICY_EXTENSION}"
 
 
 def _parse_generated_at(value: str) -> Optional[datetime]:
+    """Parse an ISO-8601 ``...Z`` timestamp, or None when malformed."""
     if not value.endswith("Z"):
         return None
     try:
@@ -439,10 +453,12 @@ def _parse_generated_at(value: str) -> Optional[datetime]:
 
 
 def _is_number(value: Any) -> TypeGuard[int | float]:
+    """True for ints/floats (excluding bools) usable as numeric YAML scalars."""
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _validate_global(global_block: Any) -> None:
+    """Validate the ``global`` block, raising ``PolicyValidationError`` on any mismatch."""
     if not isinstance(global_block, dict):
         raise PolicyValidationError(f"global must be a mapping, got {type(global_block).__name__}")
 
@@ -477,6 +493,7 @@ def _validate_global(global_block: Any) -> None:
 
 
 def _validate_context_entry(entry: Any, index: int, seen: set[str]) -> None:
+    """Validate one ``contexts[i]`` entry; ``seen`` tracks unique ``context_ref``s."""
     if not isinstance(entry, dict):
         raise PolicyValidationError(f"contexts[{index}] must be a mapping")
 

@@ -96,6 +96,7 @@ class CalibrationContext:
 
     @property
     def has_enough_data(self) -> bool:
+        """True once the calibrated sample count meets ``min_sample_size``."""
         return self.current_sample_size >= self.min_sample_size
 
 

@@ -422,10 +422,12 @@ class DecisionLedger:
     # ------------------------------------------------------------------ #
 
     def _require_open(self) -> None:
+        """Raise ``RuntimeError`` when the ledger has already been shut down."""
         if self._closed:
             raise RuntimeError("DecisionLedger is shut down; create a new instance to use it")
 
     def _write_final_stats(self, stats: Dict[str, Any]) -> None:
+        """Persist the final stats snapshot to ``<db stem>_stats.json``."""
         stats_path = self._db_path.with_name(self._db_path.stem + "_stats.json")
         try:
             stats_path.write_text(json.dumps(stats, indent=2, sort_keys=True), encoding="utf-8")

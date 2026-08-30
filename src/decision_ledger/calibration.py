@@ -116,6 +116,13 @@ class ConformalCalibrator:
         min_sample_size: int = 100,
         confidence_level: float = 0.95,
     ) -> None:
+        """Create a Split Conformal Risk Control calibrator.
+
+        ``database`` is required for context-backed calibration; without it,
+        only the pure-statistics helpers (:meth:`compute_threshold`,
+        :meth:`wilson_lower_bound`) and record-based
+        :meth:`calibrate_by_context` work.
+        """
         if not 0.0 < target_alpha < 1.0:
             raise ValueError("target_alpha must be within (0.0, 1.0)")
         if min_sample_size < 1:
@@ -360,11 +367,13 @@ class ConformalCalibrator:
     # ------------------------------------------------------------------ #
 
     def _require_database(self) -> Database:
+        """Return the bound database or raise a clear ``ValueError``."""
         if self.database is None:
             raise ValueError("ConformalCalibrator needs a Database to calibrate contexts")
         return self.database
 
 
 def _require_valid_context_hash(context_hash: bytes) -> None:
+    """Raise ``ValueError`` unless ``context_hash`` is a valid 16-byte hash."""
     if not validate_context_hash(context_hash):
         raise ValueError("context_hash must be exactly 16 bytes (128-bit context reference)")

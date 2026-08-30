@@ -401,6 +401,7 @@ class JsonlExport:
 
     @property
     def running(self) -> bool:
+        """True while the background exporter thread is alive."""
         return self._thread is not None and self._thread.is_alive()
 
     def start(self) -> None:
@@ -419,6 +420,7 @@ class JsonlExport:
         self._thread = None
 
     def _run(self) -> None:
+        """Export loop: poll the ring buffer and flush batches on interval."""
         pending: List[DecisionRecord] = []
         last_flush = time.monotonic()
         while not self._stop_event.is_set():

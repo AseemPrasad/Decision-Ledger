@@ -69,6 +69,7 @@ class DecisionRecord:
         )
 
     def to_dict(self) -> dict[str, Any]:
+        """Serializable snapshot of the record as a plain dict."""
         return {
             "decision_id": self.decision_id,
             "timestamp_ns": self.timestamp_ns,
@@ -112,6 +113,7 @@ class RingBuffer:
     _WARN3_EVERY_S = 5.0
 
     def __init__(self, capacity: int = 100_000) -> None:
+        """Create a bounded ring buffer with the given record capacity."""
         if capacity < 1:
             raise ValueError("capacity must be >= 1")
         self.capacity = capacity
@@ -125,16 +127,20 @@ class RingBuffer:
 
     @property
     def total_pushed(self) -> int:
+        """Total records ever accepted by :meth:`push` (including evicted ones)."""
         return self._total_pushed
 
     @property
     def dropped_count(self) -> int:
+        """Records dropped under overload (evicted at wrap or rejected)."""
         return self._dropped
 
     def size(self) -> int:
+        """Current number of buffered records."""
         return len(self._deque)
 
     def fill_level(self) -> float:
+        """Current occupancy as a fraction of capacity (0.0-1.0)."""
         return len(self._deque) / self.capacity
 
     def push(self, record: Any) -> bool:

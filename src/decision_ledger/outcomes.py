@@ -165,6 +165,7 @@ class OutcomeRecord:
             self.outcome_timestamp_ns = now_ns()
 
     def to_dict(self) -> dict[str, Any]:
+        """Serializable snapshot of the outcome as a plain dict."""
         return {
             "decision_id": self.decision_id,
             "outcome_timestamp_ns": self.outcome_timestamp_ns,
@@ -191,6 +192,7 @@ class JoinedRecord:
 
     @property
     def latency_delta_ns(self) -> int:
+        """Elapsed nanoseconds between the decision and its outcome."""
         return self.outcome_timestamp_ns - self.decision_timestamp_ns
 
     @property
@@ -209,6 +211,7 @@ class InMemoryOutcomeCollector:
     """
 
     def __init__(self, paths: List[Path] | None = None) -> None:
+        """Create a collector; ``paths`` (deprecated) is kept for compatibility."""
         self._records: List[OutcomeRecord] = []
         self._paths = paths or []
 
@@ -233,9 +236,11 @@ class InMemoryOutcomeCollector:
         return outcome
 
     def iter_records(self) -> Iterable[OutcomeRecord]:
+        """Iterate over all collected outcomes."""
         return iter(self._records)
 
     def export(self, path: str | Path) -> Path:
+        """Write every outcome as newline-delimited JSON to ``path``."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as handle:
@@ -245,6 +250,7 @@ class InMemoryOutcomeCollector:
         return path
 
     def import_file(self, path: str | Path) -> int:
+        """Load newline-delimited JSON outcomes from ``path``; returns the count."""
         imported = 0
         with Path(path).open("r", encoding="utf-8") as handle:
             for line in handle:
@@ -266,14 +272,17 @@ class DecisionOutcomeJoiner:
     """Join decision records to outcomes by ``decision_id``."""
 
     def __init__(self, outcomes: Iterable[OutcomeRecord] | None = None) -> None:
+        """Pre-index ``outcomes`` by ``decision_id`` for later joins."""
         self._by_id: Dict[str, OutcomeRecord] = {}
         for outcome in outcomes or []:
             self._by_id[outcome.decision_id] = outcome
 
     def add_outcome(self, outcome: OutcomeRecord) -> None:
+        """Index (or replace) the outcome for its ``decision_id``."""
         self._by_id[outcome.decision_id] = outcome
 
     def join(self, decisions: Iterable[DecisionRecord]) -> List[JoinedRecord]:
+        """Pair each decision with its outcome; decisions without one are skipped."""
         joined: List[JoinedRecord] = []
         for decision in decisions:
             outcome = self._by_id.get(decision.decision_id)
@@ -320,6 +329,7 @@ class OutcomeCollector:
     """
 
     def __init__(self, database: Database) -> None:
+        """Bind the collector to a durable :class:`Database` store."""
         self.database = database
         self._outcomes_logged = 0
         self._batches_logged = 0
@@ -466,6 +476,7 @@ class OutcomeCollector:
     # -- internals ---------------------------------------------------------- #
 
     def _ensure_decision_exists(self, decision_id: str) -> None:
+        """Raise ``DecisionNotFoundError`` unless the decision is in the ledger."""
         rows = self.database.execute_query(
             "SELECT 1 FROM decisions WHERE decision_id = ?", (decision_id,)
         )
@@ -490,6 +501,7 @@ class OutcomeCollector:
         outcome_source: Any,
         metadata: Any,
     ) -> _OutcomeRow:
+        """Build a validated, ID- and timestamp-stamped row for ``outcomes``."""
         return {
             "outcome_id": generate_uuidv7(),
             "decision_id": decision_id,
@@ -500,6 +512,7 @@ class OutcomeCollector:
         }
 
     def _insert_rows(self, rows: List[_OutcomeRow]) -> None:
+        """Persist ``rows`` atomically and update lifecycle counters."""
         try:
             inserted = self.database.batch_insert("outcomes", rows)
         except DatabaseError as exc:
@@ -516,6 +529,7 @@ class OutcomeCollector:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser for outcome logging."""
     parser = argparse.ArgumentParser(
         prog="python -m decision_ledger.outcomes",
         description=(

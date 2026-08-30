@@ -227,6 +227,12 @@ class Database:
     """
 
     def __init__(self, db_path: str = "ledger.db") -> None:
+        """Open a thread-local SQLite ledger store at ``db_path``.
+
+        Args:
+            db_path: Path to the SQLite database file (or ``:memory:``).
+                Directories are created as needed.
+        """
         self._db_path = Path(db_path)
         self._local: threading.local = threading.local()
         self._connections: set[sqlite3.Connection] = set()
@@ -254,6 +260,7 @@ class Database:
         return conn
 
     def _open_new(self) -> sqlite3.Connection:
+        """Open a fresh connection with WAL-less autocommit settings."""
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread=False lets `close()` run from any thread. Each
         # thread still gets its own connection (`_local.conn`); SQLite's
@@ -306,6 +313,7 @@ class Database:
         self._write_schema(self._get_conn())
 
     def _write_schema(self, conn: sqlite3.Connection) -> None:
+        """Idempotently create all tables and indexes on ``conn``."""
         try:
             conn.executescript(_SCHEMA_SQL)
         except sqlite3.Error as exc:
@@ -326,6 +334,7 @@ class Database:
         self._verify_schema(conn)
 
     def _verify_schema(self, conn: sqlite3.Connection) -> None:
+        """Assert ``conn``'s tables/indexes match the expected layout."""
         check = conn.execute("PRAGMA quick_check").fetchone()
         if check is None or check[0] != "ok":
             raise DatabaseError(f"quick_check failed: {check!r}")
@@ -394,6 +403,7 @@ class Database:
         conn = self._get_conn()
 
         def _do() -> List[sqlite3.Row]:
+            """Run the query on the calling thread's connection."""
             return list(conn.execute(query, params))
 
         try:
@@ -425,6 +435,7 @@ class Database:
         conn = self._get_conn()
 
         def _do() -> int:
+            """Run the write and return the affected row count."""
             cursor = conn.execute(query, params)
             return int(cursor.rowcount)
 
@@ -480,6 +491,7 @@ class Database:
         conn = self._get_conn()
 
         def _do() -> int:
+            """Run the atomic multi-row insert inside one transaction."""
             conn.execute("BEGIN")
             try:
                 conn.executemany(statement, rows)
@@ -639,6 +651,7 @@ class Joiner:
     """
 
     def __init__(self, database: Database) -> None:
+        """Create a joiner bound to the given :class:`Database`."""
         self.database = database
 
     def join_decisions_and_outcomes(

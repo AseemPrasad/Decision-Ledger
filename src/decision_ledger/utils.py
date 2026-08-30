@@ -26,10 +26,13 @@ logger = logging.getLogger(__name__)
 class _Blake3Hasher(Protocol):
     """The small surface of a BLAKE3 hasher used by :func:`make_context_hash`."""
 
-    def digest(self, size: int = ...) -> bytes: ...
+    def digest(self, size: int = ...) -> bytes:
+        """Return ``size`` digest bytes for the input fed to the hasher."""
+        ...
 
 
 def _default_blake3_factory() -> Callable[[bytes], _Blake3Hasher] | None:
+    """Return a BLAKE3 constructor (stdlib or ``blake3`` package), or None."""
     factory: Callable[[bytes], _Blake3Hasher] | None = None
     try:  # CPython >= 3.13 with BLAKE3 enabled ships hashlib.blake3
         candidate = getattr(hashlib, "blake3", None)
