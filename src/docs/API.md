@@ -212,6 +212,37 @@ Wilson score interval lower bound for coverage `p` over `n` samples (clamped to
 
 ### `class CalibrationRecord(context_hash, non_conformity_score, loss, *, is_independent=True, is_exploratory=False)`
 
+## Pipeline
+
+### `class CalibrationPipeline(database, gatekeeper, policy_generator, target_alpha=0.05)`
+
+Orchestrates calibration → policy generation → hot reload in one call. Stores
+all components; builds an internal `ConformalCalibrator` from `database`,
+`target_alpha` and `policy_generator.min_sample_size_default`.
+
+`target_alpha` must be in `(0.0, 1.0)`.
+
+#### `run_calibration() -> str`
+
+Enumerates the distinct context hashes with at least one outcome, calibrates
+each (`calibrate_context`) and measures drift (`detect_drift`), aggregates the
+`{context_hash: CalibrationResult}` mapping, writes a new policy artifact via
+`policy_generator.generate_policy(results)`, hot-reloads it into the gatekeeper
+(`reload_policy_from_file`), prints a one-line summary
+(`contexts` / `activated` / `draining` / `drift`), and returns the artifact
+path. A context is *activated* when its `q_hat` is not `None`; otherwise it is
+*draining* and remains fail-closed. An empty store produces an empty
+(fail-closed) policy.
+
+#### `get_calibration_stats() -> dict`
+
+Read-only snapshot: `total_decisions`, `total_outcomes`, `join_rate`
+(decisions with an outcome / total decisions), `contexts_calibrated`,
+`samples_per_context` (hex context → counted samples), `q_hat_distribution`
+(`activated_count`, `draining_count`, the context hex lists and the
+per-context `q_hat` values), and `drift`
+(`drift_detected_count` / `drifted_contexts`). Doesn't write anything.
+
 ### `class CalibrationResult(q_hat, sample_size, coverage_lower_bound, achieved_empirical_risk, min_observed_loss=0.0, max_observed_loss=0.0)`
 
 - `q_hat: float | None` — `None` means "do not activate" (insufficient data or

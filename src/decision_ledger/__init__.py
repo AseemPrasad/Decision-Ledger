@@ -37,6 +37,7 @@ from .outcomes import (
     OutcomeRecord,
     OutcomeSource,
 )
+from .pipeline import CalibrationPipeline
 from .policy import (
     PolicyError,
     PolicyGenerator,
@@ -68,6 +69,7 @@ __version__ = "0.1.0"
 __all__ = [
     "BatchConsumer",
     "CalibrationContext",
+    "CalibrationPipeline",
     "CalibrationRecord",
     "CalibrationResult",
     "ConformalCalibrator",
