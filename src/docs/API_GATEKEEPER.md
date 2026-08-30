@@ -7,13 +7,14 @@ from `decision_ledger.gatekeeper` and is re-exported from the package root.
 from decision_ledger import Gatekeeper, GateAction, DecisionType, CalibrationContext
 ```
 
-## `class Gatekeeper(policy, exploration_rate=0.02, telemetry=None)`
+## `class Gatekeeper(policy=None, policy_file=None, exploration_rate=0.02, telemetry=None)`
 
 Dataclass. Decides whether a small model may act for a given context.
 
 | Parameter | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `policy` | `dict[bytes, CalibrationContext]` | — | Calibrated context snapshot keyed by 16-byte context hash. Build with `policy_from_results(...).contexts` or `policy_from_dict(load_policy(...)).contexts`. Swapped atomically via `reload_policy`. |
+| `policy` | `dict[bytes, CalibrationContext]` | `{}` | Calibrated context snapshot keyed by 16-byte context hash. Build with `policy_from_results(...).contexts` or `policy_from_dict(load_policy(...)).contexts`. Defaults to an empty (fail-closed) policy. |
+| `policy_file` | `str \| None` | `None` | Optional schema-1.0 artifact YAML loaded at construction. Takes precedence over `policy`. |
 | `exploration_rate` | `float` | `0.02` | Epsilon for stratified counterfactual sampling. Must satisfy `0.0 <= rate <= 1.0` (raises `ValueError` otherwise); `0.0` disables exploration. |
 | `telemetry` | `RingBuffer \| None` | `None` | Optional ring buffer. When attached, every `evaluate` appends a `DecisionRecord` with the measured decision latency. Off by default to keep the hot path allocation-free. |
 
@@ -78,6 +79,31 @@ from decision_ledger.policy import load_policy, policy_from_dict
 
 gk.reload_policy(policy_from_dict(load_policy("policies/policy-v1.yaml")).contexts)
 ```
+
+## `from_policy_file(policy_file: str, exploration_rate=0.02) -> Gatekeeper` *(classmethod)*
+
+Build a gatekeeper from a schema-1.0 artifact YAML:
+
+```python
+gk = Gatekeeper.from_policy_file("policies/policy_20260830-153000.yaml")
+```
+
+Loads the artifact, converts it with `convert_policy_dict_to_contexts`, logs
+`[Loaded policy: version=<version>, contexts=<n>]`, and raises
+`FileNotFoundError` (missing) or `PolicyValidationError` (invalid artifact).
+
+## `reload_policy_from_file(policy_file: str) -> None`
+
+Reload a policy from a schema-1.0 artifact YAML, swapping atomically. Logs the
+version transition: `[Reloaded policy: <old> -> <new>]`.
+
+## `convert_policy_dict_to_contexts(policy_dict: dict) -> dict[bytes, CalibrationContext]` *(staticmethod)*
+
+Convert a validated artifact dict into gatekeeper contexts: `context_ref` hex
+decodes to the 16-byte context hash, `min_sample_size` is global
+`min_sample_size_default`, and `is_active` is `True` only for `ACTIVE`
+contexts. `DRAINING` / `REVOKED` contexts are present but inactive (fail
+closed).
 
 ## `get_metrics() -> dict[str, Any]`
 

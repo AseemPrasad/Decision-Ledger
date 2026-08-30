@@ -4,13 +4,16 @@ Public surface comes from `decision_ledger/__init__.py`.
 
 ## Gatekeeper
 
-### `class Gatekeeper(policy, exploration_rate=0.02, telemetry=None)`
+### `class Gatekeeper(policy=None, policy_file=None, exploration_rate=0.02, telemetry=None)`
 
 Decides whether a small model may act for a given context.
 
 - `policy: dict[bytes, CalibrationContext]` — calibrated context snapshot keyed
   by 16-byte context hash; swapped atomically. Build it from a
-  `ServingPolicy` via `policy.contexts`.
+  `ServingPolicy` via `policy.contexts`. Omit to start fail-closed (every
+  context escalates).
+- `policy_file: str | None` — optional schema-1.0 artifact YAML to load at
+  construction; takes precedence over `policy`.
 - `exploration_rate: float` — epsilon for stratified counterfactual sampling
   (`0.0 .. 1.0`); must be within `[0.0, 1.0]`.
 - `telemetry: RingBuffer | None` — optional ring buffer where each decision is
@@ -44,6 +47,25 @@ Thread-safe policy swap (RLock). Evaluations in flight finish against the old
 snapshot; subsequent calls observe the new one. E.g. after hourly
 calibration:
 `gk.reload_policy(policy_from_dict(load_policy("policies/policy-v1.yaml")).contexts)`.
+
+#### `from_policy_file(policy_file: str, exploration_rate=0.02) -> Gatekeeper` *(classmethod)*
+
+Load a schema-1.0 artifact YAML and build a gatekeeper from it. Logs
+`[Loaded policy: version=<version>, contexts=<n>]` and raises
+`FileNotFoundError` / `PolicyValidationError` for missing or invalid files.
+
+#### `reload_policy_from_file(policy_file: str) -> None`
+
+Reload from a schema-1.0 artifact YAML, swapping atomically. Logs the version
+transition: `[Reloaded policy: <old> -> <new>]`.
+
+#### `convert_policy_dict_to_contexts(policy_dict: dict) -> dict[bytes, CalibrationContext]` *(staticmethod)*
+
+Convert an artifact dict into gatekeeper contexts: `context_ref` hex is
+decoded to the 16-byte key, `min_sample_size` comes from
+`global.min_sample_size_default`, and `is_active` is `True` only when
+`state == "ACTIVE"` (`DRAINING` / `REVOKED` contexts stay present but fail
+closed).
 
 #### `get_metrics() -> dict`
 
