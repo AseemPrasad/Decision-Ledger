@@ -165,13 +165,22 @@ class RingBuffer:
         return True
 
     def pop_batch(self, max_records: int = 1000) -> List[DecisionRecord]:
-        """Drain up to ``max_records`` records (FIFO, O(1) per record)."""
+        """Drain up to ``max_records`` records (FIFO, O(1) per record).
+
+        Safe against concurrent pops from another thread: each record is
+        popped atomically and an empty deque ends the batch early, so two
+        drainers at worst split the buffer between them instead of raising.
+        """
         if max_records <= 0:
             return []
         count = min(max_records, len(self._deque))
-        if count <= 0:
-            return []
-        return [self._deque.popleft() for _ in range(count)]
+        batch: List[DecisionRecord] = []
+        for _ in range(count):
+            try:
+                batch.append(self._deque.popleft())
+            except IndexError:
+                break
+        return batch
 
     def _evict_low_priority(self) -> int:
         """Discard one record, preferring an exploratory one; else oldest.

@@ -176,6 +176,26 @@ class BatchConsumer(threading.Thread):
             backlog,
         )
 
+    def drain_now(self) -> int:
+        """Synchronously drain the ring buffer into SQLite (ops/tests).
+
+        Pulls everything currently in the ring buffer into the in-memory batch
+        and flushes it in one transaction. Safe to call while the loop thread
+        is running: :meth:`~.telemetry.RingBuffer.pop_batch` is atomic per
+        record, so a concurrent drain may split the buffer but never drops or
+        duplicates a record.
+
+        Returns:
+            Number of records drained from the ring buffer.
+        """
+        pending = self.ring_buffer.pop_batch(max_records=10_000)
+        if not pending:
+            return 0
+        with self._lock:
+            self._batch.extend(pending)
+        self._flush_to_db()
+        return len(pending)
+
     # ------------------------------------------------------------------ #
     # The drain loop
     # ------------------------------------------------------------------ #
