@@ -46,6 +46,8 @@ class ControlPlaneRequestHandler(BaseHTTPRequestHandler):
             self._handle_get_policy()
         elif path == "/api/v1/tenants/metering":
             self._handle_get_metering()
+        elif path == "/api/v1/analytics/clickhouse":
+            self._send_json({"clickhouse_enabled": getattr(self, "clickhouse_store", None) is not None})
         else:
             self._send_json({"error": "Endpoint not found"}, status=HTTPStatus.NOT_FOUND)
 
