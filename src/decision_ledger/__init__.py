@@ -48,7 +48,8 @@ from .outcomes import (
     OutcomeSource,
     _coerce_outcome_source,
 )
-from .pipeline import CalibrationPipeline
+from .pipeline import AutoRecalibrationPipeline, CalibrationPipeline, DriftMonitor
+from .webhooks import WebhookFormat, WebhookNotifier, WebhookTarget
 from .policy import (
     PolicyError,
     PolicyGenerator,

@@ -146,3 +146,87 @@ class CalibrationPipeline:
         """Distinct context hashes that currently have at least one outcome."""
         joined = self.database.get_joined_records(include_unmatched=False)
         return sorted({row["context_hash"] for row in joined})
+
+
+class DriftMonitor:
+    """Monitors empirical loss coverage against risk bounds."""
+
+    def __init__(self, target_alpha: float = 0.05) -> None:
+        self.target_alpha = target_alpha
+
+    def check_drift(
+        self, context_hash: bytes, empirical_records: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Evaluate empirical loss over window of records."""
+        if not empirical_records:
+            return {"drift_detected": False, "observed_risk": 0.0, "target_alpha": self.target_alpha}
+
+        losses = [float(r.get("loss", 0.0)) for r in empirical_records if r.get("loss") is not None]
+        if not losses:
+            return {"drift_detected": False, "observed_risk": 0.0, "target_alpha": self.target_alpha}
+
+        observed_risk = sum(losses) / len(losses)
+        drift_detected = observed_risk > self.target_alpha
+
+        return {
+            "context_hash": context_hash.hex(),
+            "drift_detected": drift_detected,
+            "observed_risk": observed_risk,
+            "target_alpha": self.target_alpha,
+            "sample_count": len(losses),
+        }
+
+
+class AutoRecalibrationPipeline:
+    """Event-driven automated closed-loop recalibration & incident alert pipeline."""
+
+    def __init__(
+        self,
+        pipeline: CalibrationPipeline,
+        webhook_notifier: Optional[Any] = None,
+        auto_trigger_on_drift: bool = True,
+    ) -> None:
+        self.pipeline = pipeline
+        self.webhook_notifier = webhook_notifier
+        self.auto_trigger_on_drift = auto_trigger_on_drift
+        self.drift_monitor = DriftMonitor(target_alpha=pipeline.target_alpha)
+
+    def evaluate_and_recalibrate_if_needed(
+        self, empirical_data_by_context: Optional[Dict[bytes, List[Dict[str, Any]]]] = None
+    ) -> Dict[str, Any]:
+        """Check for post-calibration drift and trigger recalibration + alert dispatch."""
+        context_hashes = self.pipeline._context_hashes()
+        drift_results = {}
+        drift_detected_count = 0
+
+        if empirical_data_by_context:
+            for ctx_hash, records in empirical_data_by_context.items():
+                drift_info = self.drift_monitor.check_drift(ctx_hash, records)
+                drift_results[ctx_hash.hex()] = drift_info
+                if drift_info["drift_detected"]:
+                    drift_detected_count += 1
+                    if self.webhook_notifier is not None:
+                        self.webhook_notifier.dispatch_alert(
+                            event_type="SLA_COVERAGE_BREACH",
+                            context_hash=ctx_hash.hex(),
+                            observed_risk=drift_info["observed_risk"],
+                            target_alpha=self.pipeline.target_alpha,
+                            recalibration_status="TRIGGERED" if self.auto_trigger_on_drift else "MANUAL_REQUIRED",
+                            details={"sample_count": drift_info["sample_count"]},
+                        )
+
+        recalibration_executed = False
+        new_policy_file = None
+
+        if drift_detected_count > 0 and self.auto_trigger_on_drift:
+            logger.info("Drift detected on %d contexts. Triggering auto-recalibration run.", drift_detected_count)
+            new_policy_file = self.pipeline.run_calibration()
+            recalibration_executed = True
+
+        return {
+            "drift_detected_count": drift_detected_count,
+            "recalibration_executed": recalibration_executed,
+            "policy_file": new_policy_file,
+            "drift_results": drift_results,
+        }
+
