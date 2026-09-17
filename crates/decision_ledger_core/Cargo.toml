@@ -1,0 +1,15 @@
+[package]
+name = "decision_ledger_core"
+version = "0.1.0"
+edition = "2021"
+authors = ["Decision Ledger Team"]
+description = "Native Rust hot-path engine for Decision Ledger"
+
+[lib]
+name = "decision_ledger_core"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = { version = "0.20.0", features = ["extension-module", "abi3-py38"] }
+blake3 = "1.5.0"
+parking_lot = "0.12.1"
