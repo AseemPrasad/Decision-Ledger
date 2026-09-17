@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package decision_ledger;
+
+// High-Throughput Binary Telemetry Record
+message TelemetryRecord {
+  string decision_id = 1;
+  bytes context_hash = 2;
+  double model_confidence = 3;
+  int32 action = 4;
+  string decision_type = 5;
+  int64 latency_ns = 6;
+  int64 timestamp_ns = 7;
+  optional double loss = 8;
+}
+
+message TelemetryBatch {
+  string client_id = 1;
+  repeated TelemetryRecord records = 2;
+}
+
+message TelemetryResponse {
+  int64 processed_count = 1;
+  bool success = 2;
+  string error_message = 3;
+}
+
+message PolicyRequest {
+  string client_id = 1;
+  string current_policy_version = 2;
+}
+
+message ContextEnvelope {
+  double q_hat = 1;
+  int32 min_sample_size = 2;
+  int32 current_sample_size = 3;
+  bool is_active = 4;
+}
+
+message PolicyUpdate {
+  string policy_version = 1;
+  int64 timestamp_ns = 2;
+  map<string, ContextEnvelope> contexts = 3;
+  bytes ed25519_signature = 4;
+}
+
+// Bi-Directional High-Throughput Service Definition
+service DecisionLedgerService {
+  // Stream telemetry records from client microservices to server
+  rpc StreamTelemetry(stream TelemetryRecord) returns (TelemetryResponse);
+  
+  // Stream policy updates from server to client nodes
+  rpc StreamPolicyUpdates(PolicyRequest) returns (stream PolicyUpdate);
+  
+  // Bi-directional full-duplex telemetry and policy sync stream
+  rpc BiDirectionalSync(stream TelemetryRecord) returns (stream PolicyUpdate);
+}
