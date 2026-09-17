@@ -254,28 +254,38 @@ class Gatekeeper:
             self.policy = new_policy
 
     @classmethod
-    def from_policy_file(cls, policy_file: str, exploration_rate: float = 0.02) -> Gatekeeper:
+    def from_policy_file(
+        cls,
+        policy_file: str,
+        exploration_rate: float = 0.02,
+        public_key: Optional[str] = None,
+    ) -> Gatekeeper:
         """Create a gatekeeper from a schema-1.0 policy artifact YAML file.
 
         Args:
-            policy_file: path to a validated policy artifact (as written by
-                :class:`~.policy.PolicyGenerator`).
+            policy_file: path to a validated policy artifact.
             exploration_rate: stratified counterfactual sampling rate.
+            public_key: optional Ed25519 public key hex for verification.
 
         Raises:
             FileNotFoundError: the artifact does not exist.
-            PolicyValidationError: the artifact is invalid (subclass of
-                :class:`ValueError`).
+            PolicyValidationError: artifact invalid or signature check failed.
         """
-        return cls(policy_file=policy_file, exploration_rate=exploration_rate)
+        gk = cls(exploration_rate=exploration_rate)
+        gk.reload_policy_from_file(policy_file, public_key=public_key)
+        return gk
 
-    def reload_policy_from_file(self, policy_file: str) -> None:
+    def reload_policy_from_file(self, policy_file: str, public_key: Optional[str] = None) -> None:
         """Reload policy from a schema-1.0 artifact YAML file.
 
-        Logs the version transition (``old -> new``) and swaps the policy in
-        atomically via :meth:`reload_policy`.
+        Verifies cryptographic Ed25519 signature if ``public_key`` is specified or if
+        the artifact contains a signature block, logs version transition, and swaps atomically.
         """
         policy_dict = self._load_policy_file(policy_file)
+        if public_key is not None or "signature" in policy_dict:
+            from .policy import verify_policy_signature
+            verify_policy_signature(policy_dict, public_key)
+
         new_policy = self.convert_policy_dict_to_contexts(policy_dict)
         new_version = str(policy_dict.get("policy_version"))
         logger.info(

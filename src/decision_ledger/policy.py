@@ -313,6 +313,7 @@ class PolicyGenerator:
         *,
         policy_version: Optional[str] = None,
         force: bool = False,
+        private_key_hex: Optional[str] = None,
     ) -> str:
         """Generate a policy artifact from per-context calibration results.
 
@@ -321,6 +322,7 @@ class PolicyGenerator:
             policy_version: explicit ``YYYYMMdd-HHMMSS`` version; default is the
                 current UTC timestamp.
             force: overwrite an existing artifact with the same version.
+            private_key_hex: optional Ed25519 private key hex for signing.
 
         Returns:
             The path of the written artifact.
@@ -355,6 +357,10 @@ class PolicyGenerator:
             ],
         }
 
+        if private_key_hex is not None:
+            artifact = sign_policy_dict(artifact, private_key_hex)
+
+        validate_policy(artifact)
         policy_file.write_text(yaml.safe_dump(artifact, sort_keys=False), encoding="utf-8")
         self._refresh_latest_link(policy_file)
         self.logger.info("[Generated policy: %s]", policy_file)
@@ -537,3 +543,92 @@ def _validate_context_entry(entry: Any, index: int, seen: set[str]) -> None:
         raise PolicyValidationError(
             f"contexts[{index}].min_sample_size must be an int >= 1, " f"got {min_sample_size!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Cryptographic Policy Signing & Verification (Ed25519)
+# ---------------------------------------------------------------------------
+
+def generate_ed25519_key_pair() -> tuple[str, str]:
+    """Generate a new hex-encoded Ed25519 (private_key, public_key) pair."""
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+    from cryptography.hazmat.primitives import serialization
+
+    private_key = ed25519.Ed25519PrivateKey.generate()
+    public_key = private_key.public_key()
+
+    priv_bytes = private_key.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    pub_bytes = public_key.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    return priv_bytes.hex(), pub_bytes.hex()
+
+
+def canonicalize_policy_dict(data: dict[str, Any]) -> bytes:
+    """Canonicalize a policy dict to sorted JSON bytes for signing/verification.
+
+    Strips the `signature` metadata block if present so signature calculation
+    is deterministic across key ordering or YAML formatting.
+    """
+    import json
+
+    payload = {k: v for k, v in data.items() if k != "signature"}
+    return json.dumps(payload, sort_keys=True).encode("utf-8")
+
+
+def sign_policy_dict(data: dict[str, Any], private_key_hex: str) -> dict[str, Any]:
+    """Sign a policy dict with an Ed25519 private key hex and attach signature block."""
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+    from cryptography.hazmat.primitives import serialization
+
+    priv_bytes = bytes.fromhex(private_key_hex)
+    private_key = ed25519.Ed25519PrivateKey.from_private_bytes(priv_bytes)
+    public_key_hex = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    ).hex()
+
+    canonical_bytes = canonicalize_policy_dict(data)
+    sig_bytes = private_key.sign(canonical_bytes)
+
+    signed = dict(data)
+    signed["signature"] = {
+        "algorithm": "Ed25519",
+        "public_key": public_key_hex,
+        "signature_hex": sig_bytes.hex(),
+    }
+    return signed
+
+
+def verify_policy_signature(data: dict[str, Any], public_key_hex: Optional[str] = None) -> bool:
+    """Verify an Ed25519 policy signature against a public key.
+
+    If `public_key_hex` is omitted, uses the `public_key` embedded in `data["signature"]`.
+    Raises `PolicyValidationError` if signature is missing or verification fails.
+    """
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+    from cryptography.exceptions import InvalidSignature
+
+    sig_block = data.get("signature")
+    if not isinstance(sig_block, dict):
+        raise PolicyValidationError("Policy artifact is missing cryptographic signature block")
+
+    target_pub_hex = public_key_hex or sig_block.get("public_key")
+    sig_hex = sig_block.get("signature_hex")
+
+    if not target_pub_hex or not sig_hex:
+        raise PolicyValidationError("Invalid signature block: missing public_key or signature_hex")
+
+    canonical_bytes = canonicalize_policy_dict(data)
+    try:
+        pub_key = ed25519.Ed25519PublicKey.from_public_bytes(bytes.fromhex(target_pub_hex))
+        pub_key.verify(bytes.fromhex(sig_hex), canonical_bytes)
+        return True
+    except (InvalidSignature, ValueError) as err:
+        raise PolicyValidationError(f"Cryptographic signature verification failed: {err}")
+
