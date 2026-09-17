@@ -125,10 +125,10 @@ class ClickHouseTelemetryStore:
         query = f"""
         SELECT quantileExact({quantile_level})(non_conformity) AS q_hat
         FROM {self.table_name}
-        WHERE context_hash = '{context_hash_hex}' AND loss IS NOT NULL;
+        WHERE context_hash = %(context_hash)s AND loss IS NOT NULL;
         """
         try:
-            result = self._client.query(query)
+            result = self._client.query(query, parameters={"context_hash": context_hash_hex})
             if result.result_rows and result.result_rows[0][0] is not None:
                 return float(result.result_rows[0][0])
             return None

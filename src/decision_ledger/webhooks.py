@@ -28,6 +28,11 @@ class WebhookTarget:
     timeout_seconds: float = 5.0
 
 
+from concurrent.futures import ThreadPoolExecutor
+
+_WEBHOOK_EXECUTOR = ThreadPoolExecutor(max_workers=5, thread_name_prefix="DecisionLedgerWebhook")
+
+
 class WebhookNotifier:
     """Dispatches diagnostic incident notifications via HTTP POST webhooks."""
 
@@ -36,10 +41,12 @@ class WebhookNotifier:
         targets: Optional[List[WebhookTarget]] = None,
         max_retries: int = 3,
         backoff_factor: float = 0.5,
+        async_dispatch: bool = False,
     ) -> None:
         self.targets = targets or []
         self.max_retries = max_retries
         self.backoff_factor = backoff_factor
+        self.async_dispatch = async_dispatch
 
     def add_target(self, target: WebhookTarget) -> None:
         self.targets.append(target)
@@ -65,8 +72,12 @@ class WebhookNotifier:
                 recalibration_status,
                 details or {},
             )
-            success = self._send_with_retry(target, payload)
-            results[target.url] = success
+            if self.async_dispatch:
+                _WEBHOOK_EXECUTOR.submit(self._send_with_retry, target, payload)
+                results[target.url] = True
+            else:
+                success = self._send_with_retry(target, payload)
+                results[target.url] = success
         return results
 
     def _format_payload(

@@ -61,7 +61,7 @@ class GrpcRemoteSyncConsumer:
                     model_confidence=float(getattr(r, "model_confidence", 0.0)),
                     action=int(getattr(r, "action", 0)),
                     decision_type=str(getattr(r, "decision_type", "route")),
-                    latency_ns=int(getattr(r, "latency_ns", 0)),
+                    latency_ns=int(getattr(r, "latency_us", 0) * 1000) if hasattr(r, "latency_us") else int(getattr(r, "latency_ns", 0)),
                     timestamp_ns=int(getattr(r, "timestamp_ns", time.time_ns())),
                     loss=float(r.loss) if getattr(r, "loss", None) is not None else None,
                 )

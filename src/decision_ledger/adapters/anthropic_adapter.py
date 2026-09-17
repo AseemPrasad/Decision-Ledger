@@ -12,6 +12,12 @@ from decision_ledger.utils import make_context_hash
 logger = logging.getLogger(__name__)
 
 
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
+
+_ANTHROPIC_SHADOW_EXECUTOR = ThreadPoolExecutor(max_workers=10, thread_name_prefix="AutoLedgerAnthropicShadow")
+
+
 class AutoLedgerAnthropicMessages:
     """Interceptor for client.messages.create()."""
 
@@ -23,6 +29,7 @@ class AutoLedgerAnthropicMessages:
         frontier_model: str,
         decision_type: str = "route",
         default_confidence: float = 0.95,
+        max_log_capacity: int = 1000,
     ) -> None:
         self._messages = target_messages
         self.gatekeeper = gatekeeper
@@ -30,7 +37,14 @@ class AutoLedgerAnthropicMessages:
         self.frontier_model = frontier_model
         self.decision_type = decision_type
         self.default_confidence = default_confidence
-        self.shadow_logs: List[Dict[str, Any]] = []
+        self._shadow_logs: deque[Dict[str, Any]] = deque(maxlen=max_log_capacity)
+
+    @property
+    def shadow_logs(self) -> List[Dict[str, Any]]:
+        return list(self._shadow_logs)
+
+    def clear_shadow_logs(self) -> None:
+        self._shadow_logs.clear()
 
     def create(self, *args: Any, **kwargs: Any) -> Any:
         """Intercept Anthropic messages create call and apply conformal gating."""
@@ -42,7 +56,7 @@ class AutoLedgerAnthropicMessages:
 
         # Evaluate gatekeeper decision
         action = self.gatekeeper.evaluate(ctx_hash, confidence, self.decision_type)
-        self.shadow_logs.append({
+        self._shadow_logs.append({
             "context_hash": ctx_hash.hex(),
             "confidence": confidence,
             "action": action,
@@ -73,7 +87,7 @@ class AutoLedgerAnthropicMessages:
                 except Exception as err:
                     logger.debug("Anthropic shadow evaluation error: %s", err)
 
-            threading.Thread(target=_log_shadow, daemon=True).start()
+            _ANTHROPIC_SHADOW_EXECUTOR.submit(_log_shadow)
             return frontier_response
 
 
