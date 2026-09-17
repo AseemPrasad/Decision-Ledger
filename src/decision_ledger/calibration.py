@@ -69,6 +69,7 @@ class CalibrationRecord:
     loss: float  # 0.0 = correct, 1.0 = incorrect
     is_independent: bool = True  # outcome source is not the small model itself
     is_exploratory: bool = False  # True if gathered via shadow exploration
+    propensity_score: float = 1.0  # sampling probability p_i under serving policy
 
 
 @dataclass(frozen=True)
@@ -463,4 +464,79 @@ class MultiObjectiveConformalCalibrator:
             sample_size=n,
             achieved_empirical_risks=empirical_risks,
         )
+
+
+# ---------------------------------------------------------------------------
+# Off-Policy Stratified Counterfactual Importance Sampling (IPW)
+# ---------------------------------------------------------------------------
+
+class IPWConformalCalibrator:
+    """Off-policy conformal calibrator utilizing Inverse Probability Weighting (IPW).
+
+    Corrects selection bias in exploratory counterfactual shadow logs by assigning
+    importance weights w_i = min(1 / p_i, max_weight_clip) to each sample and
+    solving the self-normalized weighted empirical CDF quantile.
+    """
+
+    def __init__(
+        self,
+        target_alpha: float = 0.05,
+        min_sample_size: int = 100,
+        max_weight_clip: float = 100.0,
+    ) -> None:
+        if not (0.0 < target_alpha < 1.0):
+            raise ValueError(f"target_alpha must be in (0, 1), got {target_alpha}")
+        self.target_alpha = target_alpha
+        self.min_sample_size = min_sample_size
+        self.max_weight_clip = max_weight_clip
+
+    def compute_threshold(
+        self, records: List[CalibrationRecord]
+    ) -> CalibrationResult:
+        """Compute IPW-weighted q_hat quantile threshold for off-policy records."""
+        valid_records = [r for r in records if r.is_independent]
+        n = len(valid_records)
+
+        if n < self.min_sample_size:
+            return CalibrationResult(q_hat=None, sample_size=n)
+
+        scores = np.array([r.non_conformity_score for r in valid_records])
+        losses = np.array([r.loss for r in valid_records])
+        propensities = np.array([max(1e-4, r.propensity_score) for r in valid_records])
+
+        raw_weights = 1.0 / propensities
+        weights = np.minimum(raw_weights, self.max_weight_clip)
+        normalized_weights = weights / np.sum(weights)
+
+        sorted_indices = np.argsort(scores)
+        sorted_scores = scores[sorted_indices]
+        sorted_losses = losses[sorted_indices]
+        sorted_weights = weights[sorted_indices]
+
+        cum_weighted_losses = np.cumsum(sorted_weights * sorted_losses)
+        cum_weights = np.cumsum(sorted_weights)
+        empirical_risk = cum_weighted_losses / cum_weights
+
+        within_budget = np.where(empirical_risk <= self.target_alpha)[0]
+        if len(within_budget) == 0:
+            return CalibrationResult(
+                q_hat=None,
+                sample_size=n,
+                achieved_empirical_risk=float(empirical_risk[0]),
+                min_observed_loss=float(np.min(losses)),
+                max_observed_loss=float(np.max(losses)),
+            )
+
+        best_idx = int(within_budget[-1])
+        q_hat_val = float(sorted_scores[best_idx])
+        achieved_risk = float(empirical_risk[best_idx])
+
+        return CalibrationResult(
+            q_hat=q_hat_val,
+            sample_size=n,
+            achieved_empirical_risk=achieved_risk,
+            min_observed_loss=float(np.min(losses)),
+            max_observed_loss=float(np.max(losses)),
+        )
+
 

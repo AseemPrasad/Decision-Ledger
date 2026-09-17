@@ -20,6 +20,7 @@ from .calibration import (
     CalibrationRecord,
     CalibrationResult,
     ConformalCalibrator,
+    IPWConformalCalibrator,
 )
 from .consumer import BatchConsumer, JsonlExport
 from .database import (
