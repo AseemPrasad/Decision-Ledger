@@ -2,46 +2,36 @@
 
 ## 6.1 Feature inventory
 
-### Serving (hot path)
+### Serving (hot path) & Acceleration
 | Feature | Where | Notes |
 | --- | --- | --- |
 | `evaluate()` DELEGATE/ESCALATE | `gatekeeper.py:193-245` | fail-closed |
+| Native Rust PyO3 Engine | `crates/decision_ledger_core` | SIMD BLAKE3 hashing + GIL-released evaluation |
+| Universal Zero-Code LLM Wrappers | `adapters/openai_adapter.py`, `anthropic_adapter.py` | Drop-in `AutoLedgerOpenAI` & `AutoLedgerAnthropic` SDK wrappers |
 | EXPLORE_SHADOW mode | `gatekeeper.py:231-245` | deterministic by call count |
 | Deterministic exploration | `gatekeeper.py:18-21` | `n % int(1/rate) == 0`; no PRNG |
 | Context isolation | `utils.make_context_hash` | each context has own threshold |
 | Hot reload of policy | `reload_policy` / `gatekeeper.py` | atomic swap under single lock |
-| Metrics | `get_metrics()` | escalation rates per decision type + summary |
-| Telemetry on/off | `telemetry` flag on app init | opt-out for peak perf |
+| Metrics & OpenTelemetry | `observability.py` / `gatekeeper.py` | OTel metrics + W3C TraceContext propagation |
 
-### Calibration & risk
+### Calibration, Risk & Operations
 | Feature | Where | Notes |
 | --- | --- | --- |
 | Per-context conformal threshold | `calibration.py:143-204` | `compute_threshold` |
+| Joint Multi-Objective CRC | `calibration.py` (`MultiObjectiveConformalCalibrator`) | Multi-vector Pareto bounds across Accuracy, Latency & Cost |
+| Off-Policy IPW Calibration | `calibration.py` (`IPWConformalCalibrator`) | Horvitz-Thompson IPW sampling for shadow log bias correction |
+| Event-Driven Auto-Recalibration | `pipeline.py` (`AutoRecalibrationPipeline`) | Automated closed-loop drift detection & policy reload |
+| Incident Webhooks | `webhooks.py` (`WebhookNotifier`) | Slack, PagerDuty & Teams alerts with exponential backoff |
 | `min_sample_size` enforcement | `calibration.py` | escalate below it |
 | Drift detection | `detect_drift` | threshold + feature-drift signal |
-| Group balancing for parity | `calibration.py` | balances by outcome value |
-| Wilson coverage lower bound | `calibration.py` | reported alongside q_hat |
-| Exploratory records excluded | `calibration.py` record flags | never pollute the decision threshold |
 
-### Outcomes & persistence
+### Distributed Control-Plane & Data Infrastructure
 | Feature | Where | Notes |
 | --- | --- | --- |
-| Durable batch insert | `database.py:493-502` | one tx per batch |
-| Lock retry | `database.py:358-377` | 3 attempts on `database is locked` |
-| Thread-local connections | `database.py:252-281` | per-thread isolation |
-| Joiner (idempotent) | `database.py:687-701` | `ON CONFLICT DO NOTHING` |
-| JSONL export sink | `consumer.py` (JsonlExport) | alternative persistence |
-| Outcome validation | `outcomes.py` | decision exists, value ∈ [0,1], known source, valid JSON |
-| InMemoryOutcomeCollector | `outcomes.py` | test/offline substitute |
-
-### Policy artifacts
-| Feature | Where | Notes |
-| --- | --- | --- |
-| Versioned YAML, `policy_latest` | `policy.py` | immutable artifacts + pointer |
-| `validate_policy` | `policy.py` | schema/type/value checks before publish |
-| States: ACTIVE/DRAINING/REVOKED | `policy.py` | lifecycle joinable to serving |
-| `load_policy` / `save_policy` / `rollback_policy` | `policy.py` | artifact round-trip + revert |
-| Artifact history table | DB `policies` | journal of generated artifacts |
+| Ed25519 Policy Signing | `policy.py` | Cryptographic public/private key verification for YAML policies |
+| Distributed Postgres & Redis | `docker-compose.yml`, `redis_bus.py` | Redis rate limiters & Pub/Sub policy channels |
+| ClickHouse Telemetry Data Lake | `decision_ledger_server/clickhouse.py` | Column-oriented MergeTree storage for sub-second quantile queries |
+| Bi-Directional gRPC Stream | `proto/decision_ledger.proto`, `grpc_server.py` | HTTP/2 Protobuf binary streaming |
 
 ### CLI
 | Command | Where | Notes |

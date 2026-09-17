@@ -26,8 +26,17 @@ calibration data.
 | ------------- | ------------------------------------------------------------------------- |
 | Gatekeeper    | Hot-path `evaluate()` -> `DELEGATE` / `ESCALATE` / `EXPLORE_SHADOW`        |
 | Fail-closed   | Unknown context or insufficient data always escalates                     |
-| Telemetry     | Every evaluation captured in a bounded, lossy-if-overrun ring buffer      |
-| Storage       | Background `BatchConsumer` flushes to durable SQLite (WAL) + optional JSONL|
+| Rust Core     | Native Rust PyO3 engine (`decision_ledger_core`) with SIMD BLAKE3 hashing |
+| Security      | Ed25519 cryptographic signing & verification of policy artifacts          |
+| Multi-Obj     | Joint Multi-Objective Conformal Risk Control (Accuracy, Latency, Cost)    |
+| Control-Plane | Distributed PostgreSQL & Redis sliding-window limiters & Pub/Sub channels|
+| Telemetry     | Bounded ring buffer + OpenTelemetry (OTel) metrics & W3C TraceContext     |
+| Data Lake     | ClickHouse column-oriented telemetry store for sub-second quantile queries|
+| gRPC Stream   | HTTP/2 Protobuf binary streaming reducing network bandwidth by ~70%       |
+| Off-Policy    | Horvitz-Thompson IPW importance sampling for unbiased shadow calibration |
+| SDK Adapters  | Drop-in `AutoLedgerOpenAI` & `AutoLedgerAnthropic` zero-code client wrappers|
+| Ops & Webhooks| Closed-loop drift detection with Slack, PagerDuty & Teams incident alerts |
+| Storage       | Background `BatchConsumer` flushes to durable SQLite (WAL), Postgres & ClickHouse|
 | Outcomes      | Independent labels (human / task_metric / user_report) linked by `decision_id` |
 | Calibration   | Split Conformal Risk Control: per-context `q_hat` + Wilson lower bound     |
 | Drift         | `detect_drift()` compares active-vs-full-range accuracy post-recalibration|

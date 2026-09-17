@@ -15,13 +15,13 @@ incidents, maintenance, and scaling.
 You must understand the durability model before you operate this system.
 
 ```
- evaluate() ──► RingBuffer (in-memory, capacity C) ──► BatchConsumer ──► SQLite "decisions"
-      │                                                                          │
-      └─ DecisionRecord{action, confidence, non_conformity, latency_us}          │
-                                                                                 ▼
- policy artifacts (<─ PolicyGenerator) ◄─ calibration ◄─ join decisions ◄── outcomes.log_outcome()
-      ▲                                        (joined_records)
-      └── hot-reload into Gatekeeper (exploration_rate, q_hat per context)
+ evaluate() ──► RingBuffer (in-memory) ──► BatchConsumer / gRPC Stream ──► SQLite / Postgres / ClickHouse
+      │                                                                                │
+      └─ DecisionRecord{action, confidence, non_conformity, latency_us}                │
+                                                                                       ▼
+ policy artifacts (◄─ PolicyGenerator) ◄─ Conformal/IPW Calib ◄─ join decisions ◄── outcomes.log_outcome()
+      ▲                                       (joined_records)
+      └── Ed25519 Verified Hot-Reload into Gatekeeper (Multi-Objective q_hat per context)
 ```
 
 - `evaluate()` returns **before** the decision is durable. Durability happens

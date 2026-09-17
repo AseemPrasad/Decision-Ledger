@@ -2,17 +2,9 @@
 
 ## 1. Executive summary
 
-**What the system is.** Decision Ledger is a Python library (plus a CLI) that
-answers a single question with statistical machinery: *when is a small model
-safe to trust for control-plane decisions?* It records every model decision,
-links each one to an independent outcome, computes a delegation threshold with
-conformal risk control, and enforces that threshold through a fail-closed
-gatekeeper on the serving path.
+**What the system is.** Decision Ledger is an open-core statistical systems primitive (Python/Rust SDK plus a B2B SaaS Managed Control Plane) that answers a single question with formal mathematical guarantees: *when is a small model safe to trust for control-plane decisions?* It records every model decision, links each one to an independent outcome, computes delegation thresholds with Split Conformal Risk Control, and enforces those thresholds through a fail-closed gatekeeper on the serving path.
 
-**What the system is not.** It does not host models, run an HTTP API, or
-provide a frontend. It is an embeddable library: an application imports
-`DecisionLedger`, calls `evaluate()` on the hot path, and calls `log_outcome()`
-later when ground truth arrives.
+**System Architecture.** It functions as an embeddable in-process SDK for microsecond hot-path evaluations (~8 µs), paired with an enterprise SaaS control-plane server (`decision_ledger_server`) offering HTTP/2 gRPC binary telemetry streaming, ClickHouse column-oriented data lakes, Ed25519 policy signing, OpenTelemetry metrics, and automated Slack/PagerDuty incident webhooks.
 
 **Core loop.**
 
