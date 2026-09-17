@@ -120,6 +120,7 @@ class Gatekeeper:
     policy_file: Optional[str] = field(default=None, repr=False)
     exploration_rate: float = 0.02
     telemetry: Optional[RingBuffer] = None
+    observability: Optional[Any] = None
 
     _policy_version: Optional[str] = field(default=None, init=False, repr=False)
     _lock: threading.RLock = field(init=False, repr=False)
@@ -425,16 +426,30 @@ class Gatekeeper:
         action: GateAction,
         start_ns: int,
     ) -> GateAction:
-        """Append a telemetry record when a ring buffer is attached."""
+        """Append a telemetry record and record OpenTelemetry metrics when attached."""
+        latency_us = ((time.perf_counter_ns() - start_ns) // 1000) if start_ns > 0 else 0
+
+        if self.observability is not None:
+            try:
+                self.observability.record_evaluation(
+                    action=action.name,
+                    decision_type=_DECISION_NAMES[code],
+                    context_hash=context_hash,
+                    latency_us=latency_us,
+                )
+            except Exception:
+                pass
+
         if self.telemetry is None:
             return action
+
         record = DecisionRecord.from_evaluation(
             context_hash=context_hash,
             decision_id=decision_id(),
             decision_type=_DECISION_NAMES[code],
             action=action.name,
             confidence=confidence,
-            latency_us=(time.perf_counter_ns() - start_ns) // 1000,
+            latency_us=latency_us,
         )
         self.telemetry.push(record)
         return action

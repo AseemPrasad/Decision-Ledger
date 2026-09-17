@@ -37,6 +37,7 @@ from .gatekeeper import (
     GateAction,
     Gatekeeper,
 )
+from .observability import ObservabilityManager
 from .outcomes import (
     DecisionOutcomeJoiner,
     InMemoryOutcomeCollector,
