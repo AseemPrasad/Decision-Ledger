@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import logging
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
 import numpy as np
@@ -377,3 +377,90 @@ def _require_valid_context_hash(context_hash: bytes) -> None:
     """Raise ``ValueError`` unless ``context_hash`` is a valid 16-byte hash."""
     if not validate_context_hash(context_hash):
         raise ValueError("context_hash must be exactly 16 bytes (128-bit context reference)")
+
+
+# ---------------------------------------------------------------------------
+# Multi-Objective Conformal Risk Control
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class MultiObjectiveCalibrationRecord:
+    """One labeled decision record with multi-dimensional non-conformity and loss scores."""
+
+    context_hash: bytes
+    non_conformity_scores: Dict[str, float]
+    losses: Dict[str, float]
+    is_independent: bool = True
+    is_exploratory: bool = False
+
+
+@dataclass(frozen=True)
+class MultiObjectiveCalibrationResult:
+    """Result of joint multi-objective conformal risk control calibration."""
+
+    q_hat_vector: Dict[str, float]
+    sample_size: int = 0
+    achieved_empirical_risks: Dict[str, float] = field(default_factory=dict)
+
+
+class MultiObjectiveConformalCalibrator:
+    """Joint Multi-Objective Conformal Risk Control engine.
+
+    Computes quantile bounds q_hat^{(j)} across multiple metric dimensions
+    (error, latency, cost) using Bonferroni risk budget adjustment: alpha_j* = alpha_j / k.
+    """
+
+    def __init__(
+        self,
+        target_alphas: Dict[str, float],
+        min_sample_size: int = 100,
+    ) -> None:
+        if not target_alphas:
+            raise ValueError("target_alphas must be a non-empty mapping of metric -> alpha")
+        for k, alpha in target_alphas.items():
+            if not (0.0 < alpha < 1.0):
+                raise ValueError(f"target_alpha for {k} must be in (0, 1), got {alpha}")
+
+        self.target_alphas = target_alphas
+        self.min_sample_size = min_sample_size
+
+    def compute_thresholds(
+        self, records: List[MultiObjectiveCalibrationRecord]
+    ) -> MultiObjectiveCalibrationResult:
+        """Compute joint q_hat vector across all target alpha dimensions."""
+        valid_records = [r for r in records if r.is_independent and not r.is_exploratory]
+        n = len(valid_records)
+
+        if n < self.min_sample_size:
+            return MultiObjectiveCalibrationResult(q_hat_vector={}, sample_size=n)
+
+        k = len(self.target_alphas)
+        q_hat_vector: Dict[str, float] = {}
+        empirical_risks: Dict[str, float] = {}
+
+        for metric, alpha in self.target_alphas.items():
+            alpha_star = alpha / float(k)
+
+            scores = np.array([r.non_conformity_scores.get(metric, 0.0) for r in valid_records])
+            losses = np.array([r.losses.get(metric, 0.0) for r in valid_records])
+
+            sorted_indices = np.argsort(scores)
+            sorted_scores = scores[sorted_indices]
+            sorted_losses = losses[sorted_indices]
+
+            rank = math.ceil((n + 1) * (1.0 - alpha_star))
+            rank_idx = min(n - 1, max(0, rank - 1))
+
+            q_hat_val = float(sorted_scores[rank_idx])
+            q_hat_vector[metric] = q_hat_val
+
+            delegated_mask = scores <= q_hat_val
+            risk = float(np.mean(sorted_losses[delegated_mask])) if np.any(delegated_mask) else 0.0
+            empirical_risks[metric] = risk
+
+        return MultiObjectiveCalibrationResult(
+            q_hat_vector=q_hat_vector,
+            sample_size=n,
+            achieved_empirical_risks=empirical_risks,
+        )
+

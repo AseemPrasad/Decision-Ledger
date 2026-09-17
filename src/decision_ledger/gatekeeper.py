@@ -90,6 +90,7 @@ class CalibrationContext:
 
     context_hash: bytes
     q_hat: Optional[float] = None
+    q_hat_vector: Optional[Dict[str, float]] = None
     min_sample_size: int = 100
     current_sample_size: int = 0
     is_active: bool = False
@@ -228,6 +229,60 @@ class Gatekeeper:
             escalated[code] += 1
             return self._record(context_hash, confidence, code, GateAction.ESCALATE, start_ns)
 
+    def evaluate_multi_objective(
+        self,
+        context_hash: bytes,
+        model_non_conformities: Dict[str, float],
+        decision_type: str = "route",
+    ) -> GateAction:
+        """Joint multi-objective delegation evaluation.
+
+        Delegates only if all non-conformity metrics (e.g. error, latency, cost)
+        satisfy their calibrated threshold in q_hat_vector.
+        """
+        code = _DECISION_TYPES.get(decision_type, _DEFAULT_TYPE_CODE)
+        start_ns = time.perf_counter_ns() if self.telemetry is not None else 0
+
+        with self._lock:
+            calls = self._calls
+            escalated = self._escalated
+            calls[code] += 1
+
+            context = self.policy.get(context_hash)
+            if context is None or not context.is_active or context.current_sample_size < context.min_sample_size:
+                self._escalate += 1
+                escalated[code] += 1
+                return self._record(context_hash, 0.0, code, GateAction.ESCALATE, start_ns)
+
+            q_hat_vec = context.q_hat_vector
+            if not q_hat_vec:
+                # Fallback to single q_hat if no vector exists
+                if context.q_hat is None:
+                    self._escalate += 1
+                    escalated[code] += 1
+                    return self._record(context_hash, 0.0, code, GateAction.ESCALATE, start_ns)
+                q_hat_vec = {"error": context.q_hat}
+
+            if self._should_explore():
+                self._explore += 1
+                return self._record(context_hash, 0.0, code, GateAction.EXPLORE_SHADOW, start_ns)
+
+            # Joint check: ALL non-conformities must satisfy q_hat_vector
+            all_passed = True
+            for metric, q_hat_bound in q_hat_vec.items():
+                val = model_non_conformities.get(metric, 0.0)
+                if val > q_hat_bound:
+                    all_passed = False
+                    break
+
+            if all_passed:
+                self._delegate += 1
+                return self._record(context_hash, 1.0, code, GateAction.DELEGATE, start_ns)
+
+            self._escalate += 1
+            escalated[code] += 1
+            return self._record(context_hash, 0.0, code, GateAction.ESCALATE, start_ns)
+
     def _should_explore(self) -> bool:
         """Deterministic stratified exploration by call number.
 
@@ -321,6 +376,7 @@ class Gatekeeper:
             contexts[context_hash] = CalibrationContext(
                 context_hash=context_hash,
                 q_hat=entry.get("q_hat"),
+                q_hat_vector=entry.get("q_hat_vector"),
                 min_sample_size=min_sample_size,
                 current_sample_size=int(entry["sample_size"]),
                 is_active=(entry.get("state") == "ACTIVE"),
