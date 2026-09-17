@@ -83,7 +83,9 @@ class RemotePolicyWatcher:
                     payload = json.loads(resp.read().decode("utf-8"))
                     version = payload.get("policy_version")
                     if version and version != self._current_version:
-                        self.gatekeeper.reload_policy(payload)
+                        contexts = self.gatekeeper.convert_policy_dict_to_contexts(payload)
+                        self.gatekeeper.reload_policy(contexts)
+                        self.gatekeeper._policy_version = str(version)
                         self._current_version = version
                         logger.info("Hot-reloaded policy version %s from remote SaaS", version)
                         return True

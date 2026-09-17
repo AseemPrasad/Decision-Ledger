@@ -30,8 +30,11 @@ def saas_server():
         "tenant-alpha",
         {
             "policy_version": "v2026.01",
-            "target_alpha": 0.05,
-            "contexts": {},
+            "global": {
+                "target_alpha": 0.05,
+                "min_sample_size_default": 100,
+            },
+            "contexts": [],
         },
     )
 
@@ -60,14 +63,14 @@ def test_auth_and_metering(saas_server):
     # 2. Valid ingestion
     rb = RingBuffer(capacity=100)
     rb.push(
-        DecisionRecord(
+        DecisionRecord.from_evaluation(
             decision_id="01890a2f-1234-7000-8000-000000000001",
-            context_hash="1f810209b58ae19f185af097ca9cf646",
+            context_hash=bytes.fromhex("1f810209b58ae19f185af097ca9cf646"),
+            decision_type="route",
+            action="DELEGATE",
             confidence=0.95,
-            decision_type=0,
-            gate_action=0,
-            latency_ns=8000,
-            created_at_ns=1000000000,
+            latency_us=8,
+            timestamp_ns=1000000000,
         )
     )
 
