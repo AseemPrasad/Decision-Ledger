@@ -2,7 +2,7 @@
 
 > **The High-Throughput Statistical Primitive for Fail-Closed LLM Routing & Conformal Risk Control.**
 
-![Decision Ledger Hero Banner](file:///C:/Users/aseem/.gemini/antigravity-ide/brain/bd0fe534-5245-420c-b72d-3d97d95dfe7d/decision_ledger_hero_banner_1789683019487.jpg)
+![Decision Ledger Logo Banner](docs/decision_ledger_logo.svg)
 
 [![Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.14-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-green.svg)](LICENSE)
