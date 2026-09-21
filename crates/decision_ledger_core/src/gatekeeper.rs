@@ -44,6 +44,7 @@ impl PyGatekeeper {
         })
     }
 
+    #[pyo3(signature = (context_hash, q_hat, min_sample_size, current_sample_size, is_active))]
     pub fn set_context(
         &self,
         context_hash: &[u8],
