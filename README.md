@@ -48,7 +48,63 @@ $$\mathbb{P}\Big(\text{Loss}(\text{Decision}, \text{GroundTruth}) > 0\Big) \le \
 
 ---
 
+## 🎯 1.1 Real-World Production Use Cases
+
+Decision Ledger is designed for engineering teams that run hybrid LLM cascades (small model + frontier model) and need formal statistical bounds on error rates, latency, and cost.
+
+### Use Case 1: Hybrid Model Cascading & Router Optimization
+* **Problem:** Routing every single user query to GPT-4o or Claude 3.5 Sonnet is cost-prohibitive. But routing to Qwen 7B or Llama 8B based on arbitrary confidence scores (`conf > 0.8`) causes silent hallucinations.
+* **Decision Ledger Solution:** The Gatekeeper evaluates the request's context hash against calibrated conformal bounds ($\alpha = 0.05$). If small model confidence is within the statistically safe region ($\hat{q}$), it routes to Qwen 7B (saving 80% cost). Otherwise, it fail-closed escalates to GPT-4o.
+
+### Use Case 2: Autonomous AI Agent Tool Call Delegation
+* **Problem:** AI Agents executing tool calls (e.g., database mutations, refund processing, sending emails) cannot afford mistakes. Using a large model for simple tool calling is slow, while small models can format invalid JSON.
+* **Decision Ledger Solution:** Wraps the agent's tool call decision engine. Small models handle repetitive tool calls under strict multi-objective bounds ($\text{Accuracy} \le 0.02, \text{Latency} \le 200\text{ms}$). If confidence drops, Decision Ledger triggers an `ESCALATE` to the frontier model or routes to human-in-the-loop review.
+
+### Use Case 3: LLM Judge & Quality Guardrail Cost Reduction
+* **Problem:** Evaluating 100% of LLM outputs using GPT-4o as a judge costs millions per month.
+* **Decision Ledger Solution:** Uses small models as secondary judges. Conformal Risk Control bounds the misclassification risk ($P(\text{Judge Error}) \le \alpha$). Decision Ledger delegates 75% of judge evaluations to the small model while reserving GPT-4o for ambiguous boundary cases.
+
+### Use Case 4: Real-Time SLA & Drift Management with Incident Webhooks
+* **Problem:** Fine-tuned small models degrade over time as prompt patterns or user demographics shift (data drift).
+* **Decision Ledger Solution:** The `AutoRecalibrationPipeline` continuously monitors empirical ground-truth outcomes. When empirical risk violates the budget ($\hat{R} > \alpha$), it automatically triggers an in-memory recalibration run and dispatches Slack / PagerDuty webhooks to notify engineering teams.
+
+### Use Case 5: Offline Off-Policy Calibration via Shadow Exploration
+* **Problem:** Collecting evaluation data directly on production traffic introduces selection bias (you only see outcomes for models you chose to run).
+* **Decision Ledger Solution:** `EXPLORE_SHADOW` mode runs exploratory calls in the background and applies Horvitz-Thompson Inverse Probability Weighting (IPW) ($w_i = 1/p_i$) to calculate mathematically unbiased calibration quantiles without exposing live users to risk.
+
+### Production Use Case Summary Matrix
+
+| Use Case | Small Model Role | Frontier Model Role | Decision Ledger Guarantee |
+| :--- | :--- | :--- | :--- |
+| **Model Cascade Router** | Primary fast responder | Fallback safety net | Error Rate $\le \alpha$ (e.g., 5%) |
+| **Agent Tool Execution** | High-volume JSON tool calls | Complex reasoning & fallback | Multi-Objective: Error + Latency SLA |
+| **LLM Judge Evaluation** | Automated quality scoring | High-stakes audit judge | Bounded misclassification risk |
+| **Exploratory Shadow Logging** | Counterfactual shadow evaluation | Live user response | Unbiased IPW Quantile Calibration |
+
+---
+
 ## ⚡ 2. Universal Zero-Code SDK Integration
+
+### 📦 Installation & Modular Extras
+
+Install the lightweight core engine (~2 MB) or add optional feature extras:
+
+```bash
+# Minimal base installation (In-Process Gatekeeper + SQLite)
+pip install decision-ledger
+
+# Optional: Includes OpenAI & Anthropic zero-code adapters
+pip install decision-ledger[adapters]
+
+# Optional: Includes OpenTelemetry distributed tracing
+pip install decision-ledger[otel]
+
+# Optional: Includes gRPC binary streaming & ClickHouse client
+pip install decision-ledger[grpc,clickhouse]
+
+# Complete installation with all optional features
+pip install decision-ledger[all]
+```
 
 Adopt Decision Ledger in **2 lines of code** with drop-in client wrappers for OpenAI and Anthropic:
 

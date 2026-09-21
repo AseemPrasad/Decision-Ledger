@@ -1,6 +1,13 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.4.0,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+manifest-path = "crates/decision_ledger_core/Cargo.toml"
+python-source = "src"
+module-name = "decision_ledger.decision_ledger_core"
+features = ["pyo3/abi3-py38"]
+
 
 # ---------------------------------------------------------------------------
 # Project metadata (PEP 621). This is the authoritative copy on the build
@@ -40,6 +47,29 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+adapters = [
+    "openai>=1.0.0",
+    "anthropic>=0.18.0",
+]
+otel = [
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+]
+grpc = [
+    "grpcio>=1.60.0",
+    "protobuf>=4.25.0",
+]
+clickhouse = [
+    "clickhouse-connect>=0.7.0",
+]
+server = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.22.0",
+    "redis>=5.0.0",
+]
+all = [
+    "decision-ledger[adapters,otel,grpc,clickhouse,server]",
+]
 dev = [
     "build>=1.0.0",
     "pytest>=7.0.0",
