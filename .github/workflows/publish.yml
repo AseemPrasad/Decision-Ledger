@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build_wheels:
-    name: Build wheels on ${{ matrix.target }}
+    name: Build wheels on ${{ matrix.os }} (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -18,8 +18,6 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64
-          - os: ubuntu-latest
-            target: aarch64
           - os: macos-latest
             target: x86_64
           - os: macos-latest
@@ -39,8 +37,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
-          manifest-path: crates/decision_ledger_core/Cargo.toml
+          args: --release --out dist --manifest-path crates/decision_ledger_core/Cargo.toml
 
       - name: Upload wheel artifacts
         uses: actions/upload-artifact@v4
@@ -63,8 +60,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
-          args: --out dist
-          manifest-path: crates/decision_ledger_core/Cargo.toml
+          args: --out dist --manifest-path crates/decision_ledger_core/Cargo.toml
 
       - name: Upload sdist artifact
         uses: actions/upload-artifact@v4
