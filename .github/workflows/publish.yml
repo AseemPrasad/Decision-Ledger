@@ -37,7 +37,7 @@ jobs:
       - name: Upload wheel artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}
+          name: cibw-wheels-${{ matrix.os }}
           path: dist/*.whl
 
   build_sdist:
@@ -63,7 +63,7 @@ jobs:
       - name: Upload sdist artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sdist
+          name: cibw-sdist
           path: dist/*.tar.gz
 
   publish-to-pypi:
@@ -75,10 +75,13 @@ jobs:
       id-token: write  # MANDATORY for PyPI Trusted Publisher OIDC authentication
 
     steps:
+      - name: Create dist directory
+        run: mkdir -p dist
+
       - name: Download all wheels and sdist
         uses: actions/download-artifact@v4
         with:
-          pattern: '*'
+          pattern: cibw-*
           path: dist
           merge-multiple: true
 
